@@ -17,10 +17,8 @@ public class MiscListener implements Listener {
     @EventHandler
     public void playerInteractEntity(PlayerInteractEntityEvent event) {
         var entity = event.getRightClicked();
-        if (entity instanceof MushroomCow) {
-            if (!plugin.getSkillConfig().getMisc().enableMushroomStew) {
-                event.setCancelled(true);
-            }
+        if (entity instanceof MushroomCow && !plugin.getSkillConfig().getMisc().enableMushroomStew) {
+            event.setCancelled(true);
         }
     }
 }
