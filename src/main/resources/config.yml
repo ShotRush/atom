@@ -1,0 +1,83 @@
+general:
+  hunger-cost: 0.5
+
+skills:
+  mining:
+    enabled: true
+    base-success-rate: 0.05
+    max-success-rate: 1.0
+    experience-per-action: 1
+    experience-per-level: 100
+    max-experience: 1000
+  
+  crafting:
+    enabled: true
+    base-success-rate: 0.05
+    max-success-rate: 1.0
+    experience-per-action: 2
+    experience-per-level: 100
+    max-experience: 1000
+  
+  smelting:
+    enabled: true
+    base-success-rate: 0.05
+    max-success-rate: 1.0
+    experience-per-action: 1
+    experience-per-level: 100
+    max-experience: 1000
+  
+  combat:
+    enabled: true
+    base-success-rate: 0.10
+    max-success-rate: 1.0
+    experience-per-action: 1
+    experience-per-level: 150
+    max-experience: 1500
+  
+  fishing:
+    enabled: true
+    base-success-rate: 0.05
+    max-success-rate: 1.0
+    experience-per-action: 1
+    experience-per-level: 100
+    max-experience: 1000
+  
+  enchanting:
+    enabled: true
+    base-success-rate: 0.05
+    max-success-rate: 1.0
+    experience-per-action: 3
+    experience-per-level: 100
+    max-experience: 1000
+  
+  breeding:
+    enabled: true
+    base-success-rate: 0.10
+    max-success-rate: 1.0
+    experience-per-action: 2
+    experience-per-level: 100
+    max-experience: 1000
+  
+  repairing:
+    enabled: true
+    base-success-rate: 0.05
+    max-success-rate: 1.0
+    experience-per-action: 2
+    experience-per-level: 100
+    max-experience: 1000
+  
+  brewing:
+    enabled: true
+    base-success-rate: 0.05
+    max-success-rate: 1.0
+    experience-per-action: 2
+    experience-per-level: 100
+    max-experience: 1000
+  
+  farming:
+    enabled: true
+    base-success-rate: 0.10
+    max-success-rate: 1.0
+    experience-per-action: 1
+    experience-per-level: 100
+    max-experience: 1000

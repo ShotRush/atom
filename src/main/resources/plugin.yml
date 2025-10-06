@@ -1,0 +1,4 @@
+name: Atom
+version: '1.0-ALPHA'
+main: org.shotrush.atom.Atom
+api-version: '1.21'
