@@ -1,5 +1,6 @@
 package org.shotrush.atom.handler;
 
+import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.shotrush.atom.Atom;
 import org.shotrush.atom.config.SkillConfig;
@@ -18,9 +19,13 @@ public abstract class SkillHandler {
     public abstract SkillType getSkillType();
     
     public abstract void register();
-    
+
     protected boolean consumeHunger(Player player) {
-        double hungerCost = plugin.getSkillConfig().getHungerCost();
+        return consumeHunger(player, 1);
+    }
+    
+    protected boolean consumeHunger(Player player, int multiplier) {
+        double hungerCost = plugin.getSkillConfig().getHungerCost() * multiplier;
         int currentFoodLevel = player.getFoodLevel();
         
         if (currentFoodLevel <= 0) {
@@ -69,5 +74,19 @@ public abstract class SkillHandler {
     
     protected String normalizeKey(String input) {
         return input.toUpperCase().replaceAll("_ORE$", "").replaceAll("_PLANKS$", "_WOOD");
+    }
+
+    protected Player getNearestPlayer(Location loc, double radius) {
+        if(loc.getWorld() == null) return null;
+        Player nearest = null;
+        double best = radius * radius;
+        for (Player p : loc.getWorld().getPlayers()) {
+            double d = p.getLocation().distanceSquared(loc);
+            if (d <= best) {
+                best = d;
+                nearest = p;
+            }
+        }
+        return nearest;
     }
 }
