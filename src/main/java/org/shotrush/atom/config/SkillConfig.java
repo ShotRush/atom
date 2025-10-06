@@ -10,6 +10,15 @@ import java.util.Map;
 public class SkillConfig {
     private final Map<SkillType, SkillTypeConfig> configs = new HashMap<>();
     private double hungerCost;
+    private MiscConfig misc;
+
+    public static class MiscConfig {
+        public boolean enableMushroomStew;
+
+        public MiscConfig(boolean enableMushroomStew) {
+            this.enableMushroomStew = enableMushroomStew;
+        }
+    }
     
     public static class SkillTypeConfig {
         public double baseSuccessRate;
@@ -31,6 +40,12 @@ public class SkillConfig {
     
     public void loadFromConfig(FileConfiguration config) {
         hungerCost = config.getDouble("general.hunger-cost", 0.5);
+        var miscSection = config.getConfigurationSection("misc");
+        if(miscSection != null) {
+            misc = new MiscConfig(miscSection.getBoolean("enable-mushroom-stew", true));
+        } else {
+            misc = new MiscConfig(true);
+        }
         
         for (SkillType type : SkillType.values()) {
             String path = "skills." + type.name().toLowerCase();
@@ -57,5 +72,9 @@ public class SkillConfig {
     
     public double getHungerCost() {
         return hungerCost;
+    }
+
+    public MiscConfig getMisc() {
+        return misc;
     }
 }

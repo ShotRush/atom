@@ -10,6 +10,7 @@ import org.shotrush.atom.data.DataManager;
 import org.shotrush.atom.gui.GUIListener;
 import org.shotrush.atom.gui.SkillGUI;
 import org.shotrush.atom.handler.HandlerRegistry;
+import org.shotrush.atom.listener.MiscListener;
 import org.shotrush.atom.listener.PlayerListener;
 import org.shotrush.atom.manager.SkillManager;
 
@@ -62,6 +63,7 @@ public final class Atom extends JavaPlugin {
     private void registerListeners() {
         Bukkit.getPluginManager().registerEvents(new PlayerListener(this), this);
         Bukkit.getPluginManager().registerEvents(new GUIListener(this), this);
+        Bukkit.getPluginManager().registerEvents(new MiscListener(this), this);
     }
     
     public SkillManager getSkillManager() {
