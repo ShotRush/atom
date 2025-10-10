@@ -1,6 +1,9 @@
 general:
   hunger-cost: 0.5
 
+misc:
+  enable-mushroom-stew: true
+
 skills:
   mining:
     enabled: true
