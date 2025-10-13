@@ -33,9 +33,9 @@ public class AtomCommand extends BaseCommand {
     @CommandPermission("atom.admin")
     @Description("Reload the plugin configuration")
     public void onReload(CommandSender sender) {
-        plugin.reloadConfig();
-        plugin.getSkillConfig().loadFromConfig(plugin.getConfig());
+        plugin.reloadConfiguration();
         sender.sendMessage("§aAtom configuration reloaded!");
+        sender.sendMessage("§7All configs (skills, decay, learning-boost, synergy) have been refreshed.");
     }
     
     @Subcommand("save")

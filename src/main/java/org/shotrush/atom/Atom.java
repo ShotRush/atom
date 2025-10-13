@@ -32,7 +32,8 @@ public final class Atom extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        saveDefaultConfig();
+        saveResource("config.yml", false);
+        reloadConfig();
         
         AtomAPI.initialize(this);
         
@@ -116,5 +117,14 @@ public final class Atom extends JavaPlugin {
 
     public SynergyCalculator getSynergyCalculator() {
         return synergyCalculator;
+    }
+
+    public void reloadConfiguration() {
+        reloadConfig();
+        skillConfig.loadFromConfig(getConfig());
+        skillManager.setSkillConfig(skillConfig);
+        synergyConfig.loadFromConfig(getConfig());
+        skillManager.setSynergyCalculator(synergyCalculator);
+        skillManager.setBoostCalculator(boostCalculator);
     }
 }

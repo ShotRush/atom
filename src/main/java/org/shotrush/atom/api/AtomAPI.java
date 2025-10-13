@@ -66,9 +66,7 @@ public class AtomAPI {
     }
     
     public static void reloadConfig() {
-        plugin.reloadConfig();
-        plugin.getSkillConfig().loadFromConfig(plugin.getConfig());
-        plugin.getSkillManager().setSkillConfig(plugin.getSkillConfig());
+        plugin.reloadConfiguration();
     }
 
     public static int getRepetitionCount(UUID playerId, SkillType skill, String itemKey) {
