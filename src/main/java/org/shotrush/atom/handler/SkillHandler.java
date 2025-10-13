@@ -58,8 +58,8 @@ public abstract class SkillHandler {
             return;
         }
         
-        plugin.getSkillManager().addExperience(
-            player.getUniqueId(),
+        plugin.getSkillManager().addExperienceWithBoost(
+            player,
             getSkillType(),
             itemKey,
             config.experiencePerAction,

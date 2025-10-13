@@ -5,10 +5,13 @@ import co.aikar.commands.annotation.*;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 import org.shotrush.atom.Atom;
 import org.shotrush.atom.skill.SkillData;
 import org.shotrush.atom.skill.SkillType;
+import org.shotrush.atom.synergy.SynergyCalculator;
 
+import java.util.List;
 import java.util.Map;
 
 @CommandAlias("atom")
@@ -227,6 +230,84 @@ public class AtomCommand extends BaseCommand {
             boolean enabled = plugin.getSkillConfig().getConfig(skillType).enabled;
             String status = enabled ? "§a✓" : "§c✗";
             sender.sendMessage(status + " §e" + skillType.name());
+        }
+    }
+
+    @Subcommand("createbook")
+    @CommandPermission("atom.admin")
+    @Description("Create a skill book for a specific skill and item")
+    @Syntax("<skill> <item>")
+    public void onCreateBook(Player player, String skillName, String itemName) {
+        SkillType skillType;
+        try {
+            skillType = SkillType.valueOf(skillName.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            player.sendMessage("§cInvalid skill type! Valid types: " + String.join(", ", getSkillNames()));
+            return;
+        }
+
+        String itemKey = itemName.toUpperCase().replace(" ", "_");
+        int authorExp = plugin.getSkillManager().getExperience(player.getUniqueId(), skillType, itemKey);
+
+        if (authorExp == 0) {
+            player.sendMessage("§cYou have no experience with " + itemKey + " in " + skillType.name() + "!");
+            return;
+        }
+
+        ItemStack book = plugin.getBookManager().createSkillBook(skillType, itemKey, player.getName(), authorExp);
+        player.getInventory().addItem(book);
+        player.sendMessage("§aCreated skill book for " + skillType.name() + ": " + itemKey);
+    }
+
+    @Subcommand("boost")
+    @Description("Check your current learning boost for a skill")
+    @Syntax("<skill> <item>")
+    public void onBoost(Player player, String skillName, String itemName) {
+        SkillType skillType;
+        try {
+            skillType = SkillType.valueOf(skillName.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            player.sendMessage("§cInvalid skill type! Valid types: " + String.join(", ", getSkillNames()));
+            return;
+        }
+
+        String itemKey = itemName.toUpperCase().replace(" ", "_");
+        double boost = plugin.getSkillManager().calculateBoost(player, skillType, itemKey);
+
+        player.sendMessage("§6§lLearning Boost for " + skillType.name() + ": " + itemKey);
+        player.sendMessage("§7Total Multiplier: §f" + String.format("%.2fx", boost));
+        player.sendMessage("§7XP Gain: §f" + String.format("%.0f%%", boost * 100));
+    }
+
+    @Subcommand("synergy")
+    @Description("Check what synergies will trigger for a skill action")
+    @Syntax("<skill> <item>")
+    public void onSynergy(Player player, String skillName, String itemName) {
+        SkillType skillType;
+        try {
+            skillType = SkillType.valueOf(skillName.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            player.sendMessage("§cInvalid skill type! Valid types: " + String.join(", ", getSkillNames()));
+            return;
+        }
+
+        String itemKey = itemName.toUpperCase().replace(" ", "_");
+        int baseXP = plugin.getSkillConfig().getConfig(skillType).experiencePerAction;
+
+        List<SynergyCalculator.SynergyGrant> synergies = plugin.getSynergyCalculator().calculateSynergies(
+            player.getUniqueId(), skillType, itemKey, baseXP
+        );
+
+        if (synergies.isEmpty()) {
+            player.sendMessage("§eNo synergies found for " + skillType.name() + ": " + itemKey);
+            return;
+        }
+
+        player.sendMessage("§6§lSynergies for " + skillType.name() + ": " + itemKey);
+        player.sendMessage("§7Base XP: §f" + baseXP);
+        player.sendMessage("§7Synergy Grants:");
+        for (SynergyCalculator.SynergyGrant grant : synergies) {
+            player.sendMessage("  §e" + grant.skill.name() + " §7- §f" + grant.itemKey + " §7(+§a" + grant.xp + " XP§7)");
         }
     }
     

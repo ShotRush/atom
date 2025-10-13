@@ -6,6 +6,7 @@ import java.util.Map;
 public class SkillData {
     private final Map<String, Integer> experience = new HashMap<>();
     private final Map<String, Long> lastActionTime = new HashMap<>();
+    private final Map<String, Integer> repetitionCount = new HashMap<>();
     
     public int getExperience(String itemKey) {
         return experience.getOrDefault(itemKey, 0);
@@ -15,6 +16,7 @@ public class SkillData {
         int currentExp = getExperience(itemKey);
         int newExp = Math.min(currentExp + amount, maxExperience);
         experience.put(itemKey, newExp);
+        incrementRepetitionCount(itemKey);
     }
     
     public void setExperience(String itemKey, int amount) {
@@ -27,6 +29,18 @@ public class SkillData {
     
     public void setLastActionTime(String itemKey, long time) {
         lastActionTime.put(itemKey, time);
+    }
+
+    public int getRepetitionCount(String itemKey) {
+        return repetitionCount.getOrDefault(itemKey, 0);
+    }
+
+    public void incrementRepetitionCount(String itemKey) {
+        repetitionCount.put(itemKey, getRepetitionCount(itemKey) + 1);
+    }
+
+    public void setRepetitionCount(String itemKey, int count) {
+        repetitionCount.put(itemKey, count);
     }
     
     public Map<String, Integer> getAllExperience() {
@@ -43,5 +57,34 @@ public class SkillData {
         int exp = getExperience(itemKey);
         double multiplier = 1.0 - (exp / (double) expPerLevel) * 0.008;
         return Math.max(multiplier, 0.2);
+    }
+
+    public void applyDecay(String itemKey, double initialHalfLifeHours, double stabilityIncrease, double maxStabilityMultiplier, double minRetention) {
+        long lastTime = getLastActionTime(itemKey);
+        if (lastTime == 0) {
+            return;
+        }
+
+        long currentTime = System.currentTimeMillis();
+        double hoursElapsed = (currentTime - lastTime) / (1000.0 * 60.0 * 60.0);
+
+        if (hoursElapsed <= 0) {
+            return;
+        }
+
+        int reps = getRepetitionCount(itemKey);
+        double stabilityMultiplier = Math.min(1.0 + (reps * stabilityIncrease), maxStabilityMultiplier);
+        double effectiveHalfLife = initialHalfLifeHours * stabilityMultiplier;
+
+        double retention = Math.pow(0.5, hoursElapsed / effectiveHalfLife);
+        retention = Math.max(retention, minRetention);
+
+        int currentExp = getExperience(itemKey);
+        int decayedExp = (int) Math.ceil(currentExp * retention);
+        experience.put(itemKey, decayedExp);
+    }
+
+    public Map<String, Integer> getAllRepetitionCounts() {
+        return new HashMap<>(repetitionCount);
     }
 }

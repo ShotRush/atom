@@ -1,6 +1,122 @@
 general:
   hunger-cost: 0.5
 
+decay:
+  enabled: true
+  initial-half-life-hours: 24.0
+  stability-increase-per-repetition: 1.5
+  max-stability-multiplier: 10.0
+  min-retention-percentage: 0.1
+
+learning-boost:
+  mentorship:
+    enabled: true
+    radius: 10.0
+    max-boost: 2.0
+    skill-difference-threshold: 100
+  books:
+    enabled: true
+    max-boost: 1.5
+  infrastructure:
+    enabled: true
+    max-boost: 2.5
+    search-radius: 5
+    blocks:
+      crafting:
+        - CRAFTING_TABLE
+        - SMITHING_TABLE
+        - LOOM
+        - STONECUTTER
+      smelting:
+        - FURNACE
+        - BLAST_FURNACE
+        - SMOKER
+        - CAMPFIRE
+      repairing:
+        - ANVIL
+        - CHIPPED_ANVIL
+        - DAMAGED_ANVIL
+        - GRINDSTONE
+      enchanting:
+        - ENCHANTING_TABLE
+        - BOOKSHELF
+      brewing:
+        - BREWING_STAND
+        - CAULDRON
+      farming:
+        - COMPOSTER
+        - BARREL
+        - CHEST
+
+synergy:
+  enabled: true
+  base-transfer-rate: 0.25
+  skill-synergies:
+    mining:
+      - target-skill: repairing
+        item-pattern: ".*PICKAXE"
+        transfer-rate: 0.3
+      - target-skill: crafting
+        item-pattern: "STONE"
+        transfer-rate: 0.2
+    repairing:
+      - target-skill: combat
+        item-pattern: ".*SWORD"
+        transfer-rate: 0.25
+      - target-skill: mining
+        item-pattern: ".*PICKAXE"
+        transfer-rate: 0.2
+    crafting:
+      - target-skill: repairing
+        item-pattern: ".*TOOL.*|.*WEAPON.*"
+        transfer-rate: 0.2
+      - target-skill: smelting
+        item-pattern: ".*INGOT.*"
+        transfer-rate: 0.15
+    smelting:
+      - target-skill: crafting
+        item-pattern: ".*INGOT.*|.*BRICK.*"
+        transfer-rate: 0.2
+    combat:
+      - target-skill: repairing
+        item-pattern: ".*SWORD|.*AXE"
+        transfer-rate: 0.15
+    fishing:
+      - target-skill: cooking
+        item-pattern: ".*FISH.*"
+        transfer-rate: 0.2
+    enchanting:
+      - target-skill: crafting
+        item-pattern: ".*"
+        transfer-rate: 0.1
+    breeding:
+      - target-skill: farming
+        item-pattern: ".*"
+        transfer-rate: 0.2
+    farming:
+      - target-skill: breeding
+        item-pattern: ".*"
+        transfer-rate: 0.15
+  item-synergies:
+    enabled: true
+    same-skill-transfer-rate: 0.15
+    patterns:
+      - source-pattern: ".*PICKAXE"
+        target-pattern: ".*AXE|.*SHOVEL"
+        transfer-rate: 0.2
+      - source-pattern: ".*SWORD"
+        target-pattern: ".*AXE"
+        transfer-rate: 0.25
+      - source-pattern: "STONE"
+        target-pattern: "COBBLESTONE|STONE_BRICK.*"
+        transfer-rate: 0.3
+      - source-pattern: ".*WOOD"
+        target-pattern: ".*PLANK.*|.*LOG.*"
+        transfer-rate: 0.25
+      - source-pattern: ".*INGOT"
+        target-pattern: ".*INGOT"
+        transfer-rate: 0.2
+
 misc:
   enable-mushroom-stew: true
 

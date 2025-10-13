@@ -67,7 +67,13 @@ public class DataManager {
             String skillPath = basePath + "." + type.name();
             
             for (Map.Entry<String, Integer> entry : skillData.getAllExperience().entrySet()) {
-                dataConfig.set(skillPath + "." + entry.getKey(), entry.getValue());
+                String itemKey = entry.getKey();
+                dataConfig.set(skillPath + ".experience." + itemKey, entry.getValue());
+                dataConfig.set(skillPath + ".repetitions." + itemKey, skillData.getRepetitionCount(itemKey));
+                long lastTime = skillData.getLastActionTime(itemKey);
+                if (lastTime > 0) {
+                    dataConfig.set(skillPath + ".lastAction." + itemKey, lastTime);
+                }
             }
         }
     }
@@ -88,9 +94,29 @@ public class DataManager {
             }
             
             SkillData skillData = playerData.getSkillData(type);
-            for (String itemKey : skillSection.getKeys(false)) {
-                int exp = skillSection.getInt(itemKey);
-                skillData.setExperience(itemKey, exp);
+            
+            ConfigurationSection expSection = skillSection.getConfigurationSection("experience");
+            if (expSection != null) {
+                for (String itemKey : expSection.getKeys(false)) {
+                    int exp = expSection.getInt(itemKey);
+                    skillData.setExperience(itemKey, exp);
+                }
+            }
+            
+            ConfigurationSection repsSection = skillSection.getConfigurationSection("repetitions");
+            if (repsSection != null) {
+                for (String itemKey : repsSection.getKeys(false)) {
+                    int reps = repsSection.getInt(itemKey);
+                    skillData.setRepetitionCount(itemKey, reps);
+                }
+            }
+            
+            ConfigurationSection lastActionSection = skillSection.getConfigurationSection("lastAction");
+            if (lastActionSection != null) {
+                for (String itemKey : lastActionSection.getKeys(false)) {
+                    long lastTime = lastActionSection.getLong(itemKey);
+                    skillData.setLastActionTime(itemKey, lastTime);
+                }
             }
         }
     }
