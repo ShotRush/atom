@@ -3,6 +3,7 @@ package org.shotrush.atom.api;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.shotrush.atom.Atom;
+import org.shotrush.atom.handler.HungerHandler;
 import org.shotrush.atom.handler.SkillHandler;
 import org.shotrush.atom.skill.SkillType;
 import org.shotrush.atom.synergy.SynergyCalculator;
@@ -134,5 +135,17 @@ public class AtomAPI {
 
     public static boolean isSynergyEnabled() {
         return plugin.getSynergyConfig() != null && plugin.getSynergyConfig().isEnabled();
+    }
+
+    public static boolean consumeHunger(Player player, HungerHandler.ActionType actionType) {
+        return plugin.getHungerHandler().consumeHunger(player, actionType);
+    }
+
+    public static boolean consumeHunger(Player player, HungerHandler.ActionType actionType, int multiplier) {
+        return plugin.getHungerHandler().consumeHunger(player, actionType, multiplier);
+    }
+
+    public static boolean consumeHungerRaw(Player player, double hungerCost) {
+        return plugin.getHungerHandler().consumeHungerRaw(player, hungerCost);
     }
 }

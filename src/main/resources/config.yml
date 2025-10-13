@@ -1,5 +1,18 @@
 general:
-  hunger-cost: 0.5
+  hunger-cost: 0.1
+  hunger-multipliers:
+    mining: 1.0
+    crafting: 1.0
+    smelting: 1.0
+    combat: 1.5
+    fishing: 0.8
+    enchanting: 1.2
+    breeding: 0.7
+    repairing: 1.0
+    brewing: 1.0
+    farming: 1.0
+    block-place: 0.3
+    interact: 0.2
 
 decay:
   enabled: true

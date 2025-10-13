@@ -25,29 +25,23 @@ public abstract class SkillHandler {
     }
     
     protected boolean consumeHunger(Player player, int multiplier) {
-        double hungerCost = plugin.getSkillConfig().getHungerCost() * multiplier;
-        int currentFoodLevel = player.getFoodLevel();
-        float currentSaturation = player.getSaturation();
-        
-        if (currentFoodLevel <= 0) {
-            return false;
-        }
-        
-        if (currentSaturation > 0) {
-            float newSaturation = (float) Math.max(0, currentSaturation - hungerCost);
-            player.setSaturation(newSaturation);
-            
-            if (newSaturation == 0 && hungerCost > currentSaturation) {
-                double remainingCost = hungerCost - currentSaturation;
-                double newFoodLevel = Math.max(0, currentFoodLevel - remainingCost);
-                player.setFoodLevel((int) newFoodLevel);
-            }
-        } else {
-            double newFoodLevel = Math.max(0, currentFoodLevel - hungerCost);
-            player.setFoodLevel((int) newFoodLevel);
-        }
-        
-        return true;
+        HungerHandler.ActionType actionType = getActionTypeForSkill(getSkillType());
+        return plugin.getHungerHandler().consumeHunger(player, actionType, multiplier);
+    }
+
+    private HungerHandler.ActionType getActionTypeForSkill(SkillType skillType) {
+        return switch (skillType) {
+            case MINING -> HungerHandler.ActionType.MINING;
+            case CRAFTING -> HungerHandler.ActionType.CRAFTING;
+            case SMELTING -> HungerHandler.ActionType.SMELTING;
+            case COMBAT -> HungerHandler.ActionType.COMBAT;
+            case FISHING -> HungerHandler.ActionType.FISHING;
+            case ENCHANTING -> HungerHandler.ActionType.ENCHANTING;
+            case BREEDING -> HungerHandler.ActionType.BREEDING;
+            case REPAIRING -> HungerHandler.ActionType.REPAIRING;
+            case BREWING -> HungerHandler.ActionType.BREWING;
+            case FARMING -> HungerHandler.ActionType.FARMING;
+        };
     }
     
     protected boolean rollSuccess(Player player, String itemKey) {

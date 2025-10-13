@@ -10,6 +10,7 @@ import java.util.*;
 public class SkillConfig {
     private final Map<SkillType, SkillTypeConfig> configs = new HashMap<>();
     private double hungerCost;
+    private Map<String, Double> hungerMultipliers;
     private MiscConfig misc;
     private DecayConfig decay;
     private LearningBoostConfig learningBoost;
@@ -108,6 +109,13 @@ public class SkillConfig {
     
     public void loadFromConfig(FileConfiguration config) {
         hungerCost = config.getDouble("general.hunger-cost", 0.5);
+        hungerMultipliers = new HashMap<>();
+        var multipliersSection = config.getConfigurationSection("general.hunger-multipliers");
+        if (multipliersSection != null) {
+            for (String key : multipliersSection.getKeys(false)) {
+                hungerMultipliers.put(key, multipliersSection.getDouble(key, 1.0));
+            }
+        }
         var miscSection = config.getConfigurationSection("misc");
         if(miscSection != null) {
             misc = new MiscConfig(miscSection.getBoolean("enable-mushroom-stew", true));
@@ -210,6 +218,10 @@ public class SkillConfig {
     
     public double getHungerCost() {
         return hungerCost;
+    }
+
+    public Map<String, Double> getHungerMultipliers() {
+        return hungerMultipliers;
     }
 
     public MiscConfig getMisc() {

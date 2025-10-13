@@ -12,6 +12,7 @@ import org.shotrush.atom.data.DataManager;
 import org.shotrush.atom.gui.GUIListener;
 import org.shotrush.atom.gui.SkillGUI;
 import org.shotrush.atom.handler.HandlerRegistry;
+import org.shotrush.atom.handler.HungerHandler;
 import org.shotrush.atom.listener.MiscListener;
 import org.shotrush.atom.listener.PlayerListener;
 import org.shotrush.atom.manager.SkillManager;
@@ -25,6 +26,7 @@ public final class Atom extends JavaPlugin {
     private SkillGUI skillGUI;
     private PaperCommandManager commandManager;
     private HandlerRegistry handlerRegistry;
+    private HungerHandler hungerHandler;
     private LearningBoostCalculator boostCalculator;
     private SkillBookManager bookManager;
     private SynergyConfig synergyConfig;
@@ -50,8 +52,10 @@ public final class Atom extends JavaPlugin {
         skillManager.setSynergyCalculator(synergyCalculator);
         dataManager = new DataManager(this);
         skillGUI = new SkillGUI(this);
+        hungerHandler = new HungerHandler(this);
         handlerRegistry = new HandlerRegistry(this);
         
+        hungerHandler.register();
         handlerRegistry.registerAll();
         registerCommands();
         registerListeners();
@@ -117,6 +121,10 @@ public final class Atom extends JavaPlugin {
 
     public SynergyCalculator getSynergyCalculator() {
         return synergyCalculator;
+    }
+
+    public HungerHandler getHungerHandler() {
+        return hungerHandler;
     }
 
     public void reloadConfiguration() {

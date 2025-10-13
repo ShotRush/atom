@@ -6,6 +6,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.CraftItemEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.Damageable;
@@ -36,6 +37,18 @@ public class CraftingHandler extends SkillHandler implements Listener {
         }
         
         if (!(event.getWhoClicked() instanceof Player player)) {
+            return;
+        }
+
+        if (event.isShiftClick()) {
+            event.setCancelled(true);
+            player.sendMessage("§cBulk crafting is disabled to prevent duplication!");
+            return;
+        }
+
+        if (event.getClick() == ClickType.NUMBER_KEY) {
+            event.setCancelled(true);
+            player.sendMessage("§cNumber key crafting is disabled!");
             return;
         }
         
