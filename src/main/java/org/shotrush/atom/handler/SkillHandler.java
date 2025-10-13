@@ -27,13 +27,26 @@ public abstract class SkillHandler {
     protected boolean consumeHunger(Player player, int multiplier) {
         double hungerCost = plugin.getSkillConfig().getHungerCost() * multiplier;
         int currentFoodLevel = player.getFoodLevel();
+        float currentSaturation = player.getSaturation();
         
         if (currentFoodLevel <= 0) {
             return false;
         }
         
-        double newFoodLevel = Math.max(0, currentFoodLevel - hungerCost);
-        player.setFoodLevel((int) newFoodLevel);
+        if (currentSaturation > 0) {
+            float newSaturation = (float) Math.max(0, currentSaturation - hungerCost);
+            player.setSaturation(newSaturation);
+            
+            if (newSaturation == 0 && hungerCost > currentSaturation) {
+                double remainingCost = hungerCost - currentSaturation;
+                double newFoodLevel = Math.max(0, currentFoodLevel - remainingCost);
+                player.setFoodLevel((int) newFoodLevel);
+            }
+        } else {
+            double newFoodLevel = Math.max(0, currentFoodLevel - hungerCost);
+            player.setFoodLevel((int) newFoodLevel);
+        }
+        
         return true;
     }
     

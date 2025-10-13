@@ -1,11 +1,13 @@
 package org.shotrush.atom.handler;
 
 import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.enchantment.EnchantItemEvent;
+import org.bukkit.inventory.ItemStack;
 import org.shotrush.atom.Atom;
 import org.shotrush.atom.skill.SkillType;
 
@@ -41,6 +43,7 @@ public class EnchantingHandler extends SkillHandler implements Listener {
         }
         
         if (!rollSuccess(player, itemKey)) {
+            consumeEnchantingMaterials(event, player);
             event.setCancelled(true);
             player.sendMessage("§cEnchanting failed! Lapis and levels were consumed.");
         } else {
@@ -53,5 +56,20 @@ public class EnchantingHandler extends SkillHandler implements Listener {
         }
         
         grantExperience(player, itemKey);
+    }
+
+    private void consumeEnchantingMaterials(EnchantItemEvent event, Player player) {
+        int cost = event.getExpLevelCost();
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            player.setLevel(Math.max(0, player.getLevel() - cost));
+            
+            for (ItemStack item : player.getInventory().getContents()) {
+                if (item != null && item.getType() == Material.LAPIS_LAZULI) {
+                    int lapisNeeded = Math.min(3, item.getAmount());
+                    item.setAmount(item.getAmount() - lapisNeeded);
+                    break;
+                }
+            }
+        });
     }
 }

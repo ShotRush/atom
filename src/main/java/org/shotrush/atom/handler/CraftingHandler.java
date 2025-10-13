@@ -62,6 +62,7 @@ public class CraftingHandler extends SkillHandler implements Listener {
             double failType = random.nextDouble();
             
             if (failType < 0.33) {
+                consumeCraftingMaterials(event);
                 event.setCancelled(true);
                 player.sendMessage("§cCrafting failed! Materials were consumed.");
             } else if (failType < 0.66 && isTool(result.getType())) {
@@ -73,6 +74,7 @@ public class CraftingHandler extends SkillHandler implements Listener {
                 event.getInventory().setResult(new ItemStack(Material.ROTTEN_FLESH));
                 player.sendMessage("§cThe food spoiled during crafting!");
             } else {
+                consumeCraftingMaterials(event);
                 event.setCancelled(true);
                 player.sendMessage("§cCrafting failed! Materials were consumed.");
             }
@@ -114,5 +116,16 @@ public class CraftingHandler extends SkillHandler implements Listener {
     
     private boolean isFood(Material material) {
         return material.isEdible();
+    }
+
+    private void consumeCraftingMaterials(CraftItemEvent event) {
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            for (int i = 1; i < 10; i++) {
+                ItemStack item = event.getInventory().getItem(i);
+                if (item != null && !item.getType().isAir()) {
+                    item.setAmount(item.getAmount() - 1);
+                }
+            }
+        });
     }
 }

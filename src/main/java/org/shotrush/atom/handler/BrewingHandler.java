@@ -9,6 +9,7 @@ import org.bukkit.event.inventory.BrewEvent;
 import org.bukkit.inventory.BrewerInventory;
 import org.shotrush.atom.Atom;
 import org.shotrush.atom.skill.SkillType;
+import org.bukkit.inventory.ItemStack;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -72,6 +73,7 @@ public class BrewingHandler extends SkillHandler implements Listener {
         }
         
         if (!rollSuccess(player, itemKey)) {
+            consumeBrewingIngredients(event);
             event.setCancelled(true);
             player.sendMessage("§cBrewing failed! Ingredients were consumed.");
         } else {
@@ -79,5 +81,15 @@ public class BrewingHandler extends SkillHandler implements Listener {
         }
         
         grantExperience(player, itemKey);
+    }
+
+    private void consumeBrewingIngredients(BrewEvent event) {
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            BrewerInventory inventory = event.getContents();
+            ItemStack ingredient = inventory.getIngredient();
+            if (ingredient != null && !ingredient.getType().isAir()) {
+                ingredient.setAmount(ingredient.getAmount() - 1);
+            }
+        });
     }
 }

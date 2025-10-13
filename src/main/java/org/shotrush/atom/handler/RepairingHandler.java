@@ -60,6 +60,7 @@ public class RepairingHandler extends SkillHandler implements Listener {
         }
         
         if (!rollSuccess(player, itemKey)) {
+            consumeAnvilMaterials(event);
             event.setCancelled(true);
             player.sendMessage("§cRepair failed! Materials were consumed.");
         } else {
@@ -67,5 +68,20 @@ public class RepairingHandler extends SkillHandler implements Listener {
         }
         
         grantExperience(player, itemKey);
+    }
+
+    private void consumeAnvilMaterials(InventoryClickEvent event) {
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            AnvilInventory anvil = (AnvilInventory) event.getInventory();
+            ItemStack first = anvil.getItem(0);
+            ItemStack second = anvil.getItem(1);
+            
+            if (first != null && !first.getType().isAir()) {
+                first.setAmount(0);
+            }
+            if (second != null && !second.getType().isAir()) {
+                second.setAmount(0);
+            }
+        });
     }
 }
