@@ -80,9 +80,10 @@ public class SkillGUI {
         for (Map.Entry<String, Integer> entry : sortedEntries) {
             if (slot >= 54) break;
             
-            ItemStack item = new ItemStack(Material.PAPER);
+            Material itemMaterial = getMaterialFromKey(entry.getKey());
+            ItemStack item = new ItemStack(itemMaterial);
             ItemMeta meta = item.getItemMeta();
-            meta.setDisplayName("§e" + entry.getKey());
+            meta.setDisplayName("§e" + formatItemName(entry.getKey()));
             
             List<String> lore = new ArrayList<>();
             lore.add("§6Experience: §f" + entry.getValue());
@@ -142,5 +143,34 @@ public class SkillGUI {
     
     public static void removeItemGroup(String groupName) {
         ITEM_GROUPS.remove(groupName);
+    }
+
+    private Material getMaterialFromKey(String key) {
+        if (ITEM_GROUPS.containsKey(key)) {
+            return getGroupIcon(key);
+        }
+        
+        try {
+            return Material.valueOf(key);
+        } catch (IllegalArgumentException e) {
+            return Material.PAPER;
+        }
+    }
+
+    private Material getGroupIcon(String groupName) {
+        return switch (groupName) {
+            case "ORES" -> Material.IRON_ORE;
+            case "WOOD" -> Material.OAK_LOG;
+            case "TOOLS" -> Material.IRON_PICKAXE;
+            case "ARMOR" -> Material.IRON_CHESTPLATE;
+            case "FOOD" -> Material.BREAD;
+            case "CROPS" -> Material.WHEAT;
+            case "ANIMALS" -> Material.COW_SPAWN_EGG;
+            default -> Material.PAPER;
+        };
+    }
+
+    private String formatItemName(String key) {
+        return key.toLowerCase().replace("_", " ");
     }
 }
