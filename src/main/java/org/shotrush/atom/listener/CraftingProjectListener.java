@@ -2,7 +2,6 @@ package org.shotrush.atom.listener;
 
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
-import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
@@ -18,11 +17,9 @@ import org.bukkit.inventory.ItemStack;
 import org.shotrush.atom.Atom;
 import org.shotrush.atom.manager.CraftingProjectManager;
 
-import javax.sql.rowset.spi.SyncFactoryException;
 import java.util.ArrayList;
 import java.util.List;
 
-import static javax.sql.rowset.spi.SyncFactory.getLogger;
 
 public class CraftingProjectListener implements Listener {
     private final Atom plugin;
