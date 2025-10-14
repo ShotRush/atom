@@ -1,2 +1,0 @@
-# Atom by Civlabs
-Atom

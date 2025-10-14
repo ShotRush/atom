@@ -110,6 +110,7 @@ public class CombatPenaltyListener implements Listener {
         if (efficiency >= 1.5) return 0.95;
         if (efficiency >= 1.0) return 0.90;
         if (efficiency >= 0.5) return 0.80;
+        return 0.70;
     }
     
     private double calculateAttackSpeedPenalty(double efficiency) {
@@ -117,6 +118,7 @@ public class CombatPenaltyListener implements Listener {
         if (efficiency >= 1.5) return -0.2;
         if (efficiency >= 1.0) return -0.4;
         if (efficiency >= 0.5) return -0.6;
+        return -0.8;
     }
     
     private int calculateDurabilityPenalty(double efficiency) {
