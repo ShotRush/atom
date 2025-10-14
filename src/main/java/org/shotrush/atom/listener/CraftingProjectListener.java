@@ -82,6 +82,12 @@ public class CraftingProjectListener implements Listener {
             player.sendActionBar(Component.text("Invalid crafting project"));
             return;
         }
+
+        final boolean doesntHaveFreeSlot = player.getInventory().firstEmpty() != -1;
+        if(doesntHaveFreeSlot) {
+            player.sendActionBar(Component.text("You don't have a free slot"));
+            return;
+        }
         
         double successChance = craftingProjectManager.calculateSuccessChance(player, resultMaterial);
         player.sendActionBar(Component.text(String.format("%.0f%% success chance", successChance * 100)));
