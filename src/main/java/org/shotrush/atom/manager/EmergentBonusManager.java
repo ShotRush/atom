@@ -147,7 +147,7 @@ public class EmergentBonusManager {
         double maxEfficiency = configManager.getMaxEfficiency();
         double expPerPoint = configManager.getExperiencePerEfficiencyPoint();
         
-        double efficiency = baseEfficiency + (experience / expPerPoint);
+        double efficiency = baseEfficiency + (Math.sqrt(experience) / Math.sqrt(expPerPoint));
         return Math.min(efficiency, maxEfficiency);
     }
 

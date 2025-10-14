@@ -14,10 +14,19 @@ import java.util.UUID;
 public class AtomStatsGui {
     private final Atom plugin;
     private static final Map<UUID, Integer> playerPages = new HashMap<>();
+    private static final Map<UUID, CachedData> cache = new HashMap<>();
     private static final int ITEMS_PER_PAGE = 28;
+    private static final long CACHE_MS = 3000;
 
     public AtomStatsGui(Atom plugin) {
         this.plugin = plugin;
+    }
+    
+    private static class CachedData {
+        final List<Map.Entry<String, Double>> sorted;
+        final long time;
+        CachedData(List<Map.Entry<String, Double>> s) { sorted = s; time = System.currentTimeMillis(); }
+        boolean valid() { return System.currentTimeMillis() - time < CACHE_MS; }
     }
 
     public void open(Player player) {
@@ -25,12 +34,19 @@ public class AtomStatsGui {
     }
 
     public void open(Player player, int page) {
-        PlayerData data = plugin.getPlayerDataManager().getPlayerData(player.getUniqueId());
-        Map<String, Double> experience = data.getActionExperience();
+        UUID uuid = player.getUniqueId();
+        CachedData cached = cache.get(uuid);
         
-        List<Map.Entry<String, Double>> sortedActions = experience.entrySet().stream()
-            .sorted((a, b) -> Double.compare(b.getValue(), a.getValue()))
-            .toList();
+        List<Map.Entry<String, Double>> sortedActions;
+        if (cached != null && cached.valid()) {
+            sortedActions = cached.sorted;
+        } else {
+            PlayerData data = plugin.getPlayerDataManager().getPlayerData(uuid);
+            sortedActions = data.getActionExperience().entrySet().stream()
+                .sorted((a, b) -> Double.compare(b.getValue(), a.getValue()))
+                .toList();
+            cache.put(uuid, new CachedData(sortedActions));
+        }
         
         int totalPages = (int) Math.ceil(sortedActions.size() / (double) ITEMS_PER_PAGE);
         final int currentPage = Math.max(0, Math.min(page, totalPages - 1));
@@ -56,7 +72,6 @@ public class AtomStatsGui {
             double efficiency = plugin.getEmergentBonusManager().getSpeedMultiplier(player, entry.getKey());
             double varietyBonus = plugin.getSkillTransferManager().getVarietyBonus(player);
             double masteryBonus = plugin.getSkillTransferManager().getMasteryBonus(player, entry.getKey());
-            double socialBonus = plugin.getReputationManager().getReputationBonus(player);
             double envBonus = plugin.getEnvironmentalManager().getEnvironmentalBonus(player);
             
             List<String> lore = new ArrayList<>();
@@ -71,12 +86,11 @@ public class AtomStatsGui {
             else lore.add("§8LEARNING");
             lore.add("");
             
-            boolean hasBonuses = varietyBonus > 0 || masteryBonus > 0 || socialBonus > 0 || envBonus > 0;
+            boolean hasBonuses = varietyBonus > 0 || masteryBonus > 0 || envBonus > 0;
             if (hasBonuses) {
                 lore.add("§7Bonuses");
                 if (varietyBonus > 0) lore.add("§8• §fVariety §7+" + String.format("%.0f%%", varietyBonus * 100));
                 if (masteryBonus > 0) lore.add("§8• §fMastery §7+" + String.format("%.0f%%", masteryBonus * 100));
-                if (socialBonus > 0) lore.add("§8• §fSocial §7+" + String.format("%.0f%%", socialBonus * 100));
                 if (envBonus > 0) lore.add("§8• §fEnvironment §7+" + String.format("%.0f%%", envBonus * 100));
                 lore.add("");
             }

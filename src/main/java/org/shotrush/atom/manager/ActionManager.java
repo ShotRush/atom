@@ -3,12 +3,15 @@ package org.shotrush.atom.manager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import net.kyori.adventure.title.Title;
+import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.shotrush.atom.Atom;
 import org.shotrush.atom.model.Milestone;
 import org.shotrush.atom.model.PlayerData;
 import org.shotrush.atom.model.TrackedAction;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
 
@@ -35,17 +38,21 @@ public class ActionManager {
         data.addExperience(actionId, finalExperience);
         
         applySkillTransfer(player, actionId, finalExperience);
-
+        
+        double newEfficiency = plugin.getEmergentBonusManager().getSpeedMultiplier(player, actionId);
+        double oldEfficiency = calculateOldEfficiency(oldExperience);
+        
         if (plugin.getConfig().getBoolean("display.action-bar-updates", true)) {
-            double efficiency = plugin.getEmergentBonusManager().getSpeedMultiplier(player, actionId);
             String message = String.format("§7%s §8+§f%.1f §7XP §8(§f%.2fx§8)", 
                 action.getDisplayName(), 
                 finalExperience, 
-                efficiency);
+                newEfficiency);
             
             Component component = LegacyComponentSerializer.legacyAmpersand().deserialize(message);
             player.sendActionBar(component);
         }
+        
+        checkEfficiencyMilestone(player, actionId, oldEfficiency, newEfficiency);
 
         checkMilestones(player, data);
     }
@@ -108,14 +115,41 @@ public class ActionManager {
         }
     }
 
+    private void checkEfficiencyMilestone(Player player, String actionId, double oldEff, double newEff) {
+        double[] thresholds = {1.5, 2.0, 2.5};
+        String[] titles = {"§f§lEXPERT", "§f§lMASTER", "§f§lGRANDMASTER"};
+        
+        for (int i = 0; i < thresholds.length; i++) {
+            if (oldEff < thresholds[i] && newEff >= thresholds[i]) {
+                Component title = LegacyComponentSerializer.legacyAmpersand().deserialize(titles[i]);
+                Component subtitle = Component.text(actionId + " unlocked!", NamedTextColor.GRAY);
+                player.showTitle(Title.title(title, subtitle, 
+                    Title.Times.times(Duration.ofMillis(500), Duration.ofMillis(2000), Duration.ofMillis(500))));
+                player.playSound(player.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 1.0f, 1.0f);
+                break;
+            }
+        }
+    }
+    
+    private double calculateOldEfficiency(double experience) {
+        double baseEfficiency = configManager.getBaseEfficiency();
+        double maxEfficiency = configManager.getMaxEfficiency();
+        double expPerPoint = configManager.getExperiencePerEfficiencyPoint();
+        double efficiency = baseEfficiency + (Math.sqrt(experience) / Math.sqrt(expPerPoint));
+        return Math.min(efficiency, maxEfficiency);
+    }
+
     private void grantMilestoneRewards(Player player, Milestone milestone) {
         for (Milestone.Reward reward : milestone.getRewards()) {
             switch (reward.getType()) {
                 case MESSAGE:
                     Component message = LegacyComponentSerializer.legacyAmpersand().deserialize(reward.getValue());
-                    player.sendActionBar(message);
+                    player.sendMessage(message);
+                    player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.0f);
                     break;
                 case TITLE:
+                    Component title = LegacyComponentSerializer.legacyAmpersand().deserialize(reward.getValue());
+                    player.showTitle(Title.title(title, Component.empty()));
                     break;
                 case EFFECT:
                     break;

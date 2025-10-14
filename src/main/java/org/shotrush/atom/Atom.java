@@ -16,22 +16,16 @@ import org.shotrush.atom.listener.DynamicActionListener;
 import org.shotrush.atom.listener.EmergentBonusListener;
 import org.shotrush.atom.listener.ItemQualityListener;
 import org.shotrush.atom.listener.PlayerListener;
-import org.shotrush.atom.listener.PlayerTradeListener;
 import org.shotrush.atom.listener.RestrictionListener;
-import org.shotrush.atom.config.SocialSystemsConfig;
 import org.shotrush.atom.manager.*;
 import org.shotrush.atom.util.PDCKeys;
 
 public final class Atom extends JavaPlugin {
     private ConfigManager configManager;
-    private SocialSystemsConfig socialSystemsConfig;
     private PlayerDataManager playerDataManager;
     private ActionManager actionManager;
     private EmergentBonusManager emergentBonusManager;
     private SkillTransferManager skillTransferManager;
-    private ReputationManager reputationManager;
-    private CollectiveActionManager collectiveActionManager;
-    private PoliticalManager politicalManager;
     private EnvironmentalManager environmentalManager;
     private CognitiveCapacityManager cognitiveCapacityManager;
     private DynamicActionManager dynamicActionManager;
@@ -47,14 +41,10 @@ public final class Atom extends JavaPlugin {
         
         pdcKeys = new PDCKeys(this);
         configManager = new ConfigManager(this);
-        socialSystemsConfig = new SocialSystemsConfig(this);
         playerDataManager = new PlayerDataManager(this);
         actionManager = new ActionManager(this, configManager, playerDataManager);
         skillTransferManager = new SkillTransferManager(this, configManager, playerDataManager);
         emergentBonusManager = new EmergentBonusManager(this, configManager, playerDataManager);
-        reputationManager = new ReputationManager(this, socialSystemsConfig);
-        collectiveActionManager = new CollectiveActionManager(this, socialSystemsConfig);
-        politicalManager = new PoliticalManager(this, socialSystemsConfig, reputationManager, collectiveActionManager);
         environmentalManager = new EnvironmentalManager(this);
         cognitiveCapacityManager = new CognitiveCapacityManager(this, configManager);
         dynamicActionManager = new DynamicActionManager(this, playerDataManager);
@@ -63,7 +53,6 @@ public final class Atom extends JavaPlugin {
         skillGUI = new org.shotrush.atom.gui.SkillGUI(this);
         
         configManager.loadConfig();
-        socialSystemsConfig.loadConfig();
         skillTransferManager.loadConfig();
         
         registerListeners();
@@ -94,7 +83,6 @@ public final class Atom extends JavaPlugin {
         Bukkit.getPluginManager().registerEvents(new CraftingEfficiencyListener(this, configManager, emergentBonusManager), this);
         Bukkit.getPluginManager().registerEvents(new CraftingProjectListener(this, craftingProjectManager), this);
         Bukkit.getPluginManager().registerEvents(new CropGrowthListener(this, environmentalManager), this);
-        Bukkit.getPluginManager().registerEvents(new PlayerTradeListener(this, reputationManager), this);
         Bukkit.getPluginManager().registerEvents(new GuiListener(), this);
     }
 
@@ -138,22 +126,6 @@ public final class Atom extends JavaPlugin {
 
     public SkillTransferManager getSkillTransferManager() {
         return skillTransferManager;
-    }
-
-    public ReputationManager getReputationManager() {
-        return reputationManager;
-    }
-
-    public CollectiveActionManager getCollectiveActionManager() {
-        return collectiveActionManager;
-    }
-
-    public PoliticalManager getPoliticalManager() {
-        return politicalManager;
-    }
-
-    public SocialSystemsConfig getSocialSystemsConfig() {
-        return socialSystemsConfig;
     }
 
     public EnvironmentalManager getEnvironmentalManager() {

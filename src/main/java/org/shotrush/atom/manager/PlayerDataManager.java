@@ -50,41 +50,6 @@ public class PlayerDataManager {
 
         PlayerData data = new PlayerData(playerId, actionExperience, completedMilestones);
         
-        if (config.contains("political.isBigMan")) {
-            data.setBigMan(config.getBoolean("political.isBigMan"));
-            data.setBigManScore(config.getDouble("political.bigManScore", 0.0));
-            data.setBigManFollowers(config.getInt("political.bigManFollowers", 0));
-            data.setBigManRedistributions(config.getInt("political.bigManRedistributions", 0));
-            data.setAuthorityType(config.getString("political.authorityType", "NONE"));
-            data.setLegitimacy(config.getDouble("political.legitimacy", 0.0));
-        }
-        
-        if (config.contains("social.tradeNetwork")) {
-            Map<UUID, Integer> tradeNetwork = new HashMap<>();
-            for (String key : config.getConfigurationSection("social.tradeNetwork").getKeys(false)) {
-                UUID partnerId = UUID.fromString(key);
-                int count = config.getInt("social.tradeNetwork." + key);
-                tradeNetwork.put(partnerId, count);
-            }
-            data.setTradeNetwork(tradeNetwork);
-        }
-        
-        if (config.contains("social.socialCapital")) {
-            data.setSocialCapital(config.getDouble("social.socialCapital"));
-        }
-        
-        if (config.contains("collective.projectContributions")) {
-            Map<String, Integer> contributions = new HashMap<>();
-            for (String key : config.getConfigurationSection("collective.projectContributions").getKeys(false)) {
-                contributions.put(key, config.getInt("collective.projectContributions." + key));
-            }
-            data.setPublicProjectContributions(contributions);
-        }
-        
-        if (config.contains("environmental.foodSurplus")) {
-            data.setFoodSurplus(config.getDouble("environmental.foodSurplus"));
-        }
-        
         data.setModified(false);
         return data;
     }
@@ -101,24 +66,6 @@ public class PlayerDataManager {
         }
 
         config.set("milestones", new ArrayList<>(data.getCompletedMilestones()));
-        
-        config.set("political.isBigMan", data.isBigMan());
-        config.set("political.bigManScore", data.getBigManScore());
-        config.set("political.bigManFollowers", data.getBigManFollowers());
-        config.set("political.bigManRedistributions", data.getBigManRedistributions());
-        config.set("political.authorityType", data.getAuthorityType());
-        config.set("political.legitimacy", data.getLegitimacy());
-        
-        for (Map.Entry<UUID, Integer> entry : data.getTradeNetwork().entrySet()) {
-            config.set("social.tradeNetwork." + entry.getKey().toString(), entry.getValue());
-        }
-        config.set("social.socialCapital", data.getSocialCapital());
-        
-        for (Map.Entry<String, Integer> entry : data.getPublicProjectContributions().entrySet()) {
-            config.set("collective.projectContributions." + entry.getKey(), entry.getValue());
-        }
-        
-        config.set("environmental.foodSurplus", data.getFoodSurplus());
 
         try {
             config.save(playerFile);

@@ -15,18 +15,6 @@ public class PlayerData {
     private final Set<String> discoveredRecipes;
     private boolean modified;
     private int dataVersion;
-    
-    private boolean isBigMan;
-    private double bigManScore;
-    private int bigManFollowers;
-    private int bigManRedistributions;
-    private String authorityType;
-    private double legitimacy;
-    
-    private final Map<UUID, Integer> tradeNetwork;
-    private double socialCapital;
-    private final Map<String, Integer> publicProjectContributions;
-    private double foodSurplus;
 
     public PlayerData(UUID playerId) {
         this.playerId = playerId;
@@ -35,16 +23,6 @@ public class PlayerData {
         this.discoveredRecipes = new HashSet<>();
         this.modified = false;
         this.dataVersion = DATA_VERSION;
-        this.isBigMan = false;
-        this.bigManScore = 0.0;
-        this.bigManFollowers = 0;
-        this.bigManRedistributions = 0;
-        this.authorityType = "NONE";
-        this.legitimacy = 0.0;
-        this.tradeNetwork = new HashMap<>();
-        this.socialCapital = 0.0;
-        this.publicProjectContributions = new HashMap<>();
-        this.foodSurplus = 0.0;
     }
 
     public PlayerData(UUID playerId, Map<String, Double> actionExperience, Set<String> completedMilestones) {
@@ -53,16 +31,6 @@ public class PlayerData {
         this.completedMilestones = new HashSet<>(completedMilestones);
         this.discoveredRecipes = new HashSet<>();
         this.modified = false;
-        this.isBigMan = false;
-        this.bigManScore = 0.0;
-        this.bigManFollowers = 0;
-        this.bigManRedistributions = 0;
-        this.authorityType = "NONE";
-        this.legitimacy = 0.0;
-        this.tradeNetwork = new HashMap<>();
-        this.socialCapital = 0.0;
-        this.publicProjectContributions = new HashMap<>();
-        this.foodSurplus = 0.0;
     }
 
     public UUID getPlayerId() {
@@ -106,118 +74,6 @@ public class PlayerData {
 
     public void setModified(boolean modified) {
         this.modified = modified;
-    }
-
-    public boolean isBigMan() {
-        return isBigMan;
-    }
-
-    public void setBigMan(boolean bigMan) {
-        this.isBigMan = bigMan;
-        this.modified = true;
-    }
-
-    public double getBigManScore() {
-        return bigManScore;
-    }
-
-    public void setBigManScore(double score) {
-        this.bigManScore = score;
-        this.modified = true;
-    }
-
-    public int getBigManFollowers() {
-        return bigManFollowers;
-    }
-
-    public void setBigManFollowers(int followers) {
-        this.bigManFollowers = followers;
-        this.modified = true;
-    }
-
-    public int getBigManRedistributions() {
-        return bigManRedistributions;
-    }
-
-    public void setBigManRedistributions(int redistributions) {
-        this.bigManRedistributions = redistributions;
-        this.modified = true;
-    }
-
-    public void incrementRedistributions() {
-        this.bigManRedistributions++;
-        this.modified = true;
-    }
-
-    public String getAuthorityType() {
-        return authorityType;
-    }
-
-    public void setAuthorityType(String type) {
-        this.authorityType = type;
-        this.modified = true;
-    }
-
-    public double getLegitimacy() {
-        return legitimacy;
-    }
-
-    public void setLegitimacy(double legitimacy) {
-        this.legitimacy = legitimacy;
-        this.modified = true;
-    }
-
-    public Map<UUID, Integer> getTradeNetwork() {
-        return new HashMap<>(tradeNetwork);
-    }
-
-    public void recordTrade(UUID partner) {
-        tradeNetwork.put(partner, tradeNetwork.getOrDefault(partner, 0) + 1);
-        this.modified = true;
-    }
-
-    public void setTradeNetwork(Map<UUID, Integer> network) {
-        this.tradeNetwork.clear();
-        this.tradeNetwork.putAll(network);
-        this.modified = true;
-    }
-
-    public int getTradeCount(UUID partner) {
-        return tradeNetwork.getOrDefault(partner, 0);
-    }
-
-    public double getSocialCapital() {
-        return socialCapital;
-    }
-
-    public void setSocialCapital(double capital) {
-        this.socialCapital = capital;
-        this.modified = true;
-    }
-
-    public Map<String, Integer> getPublicProjectContributions() {
-        return new HashMap<>(publicProjectContributions);
-    }
-
-    public void contributeToProject(String projectName, int amount) {
-        publicProjectContributions.put(projectName, 
-            publicProjectContributions.getOrDefault(projectName, 0) + amount);
-        this.modified = true;
-    }
-
-    public void setPublicProjectContributions(Map<String, Integer> contributions) {
-        this.publicProjectContributions.clear();
-        this.publicProjectContributions.putAll(contributions);
-        this.modified = true;
-    }
-
-    public double getFoodSurplus() {
-        return foodSurplus;
-    }
-
-    public void setFoodSurplus(double surplus) {
-        this.foodSurplus = surplus;
-        this.modified = true;
     }
 
     public boolean hasDiscoveredRecipe(String recipeId) {

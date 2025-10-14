@@ -30,9 +30,8 @@ public class AtomLeaderboardGui {
             .size(3)
             ;
         
-        guiBuilder.item(2, createTypeButton(LeaderboardType.TOTAL_XP, player));
-        guiBuilder.item(4, createTypeButton(LeaderboardType.SPECIALIZATION, player));
-        guiBuilder.item(6, createTypeButton(LeaderboardType.SOCIAL_CAPITAL, player));
+        guiBuilder.item(3, createTypeButton(LeaderboardType.TOTAL_XP, player));
+        guiBuilder.item(5, createTypeButton(LeaderboardType.SPECIALIZATION, player));
         
         List<LeaderboardEntry> entries = getLeaderboardData(type);
         
@@ -125,10 +124,6 @@ public class AtomLeaderboardGui {
                         .mapToDouble(Double::doubleValue)
                         .max().orElse(0);
                     break;
-                    
-                case SOCIAL_CAPITAL:
-                    value = data.getSocialCapital();
-                    break;
             }
             
             entries.add(new LeaderboardEntry(onlinePlayer.getName(), value));
@@ -155,10 +150,9 @@ public class AtomLeaderboardGui {
         }
     }
 
-    public enum LeaderboardType {
-        TOTAL_XP("Total Experience", "Total XP across all actions", Material.EXPERIENCE_BOTTLE),
-        SPECIALIZATION("Top Specialization", "Highest XP in a single action", Material.ENCHANTED_BOOK),
-        SOCIAL_CAPITAL("Social Capital", "Trading network influence", Material.EMERALD);
+    private enum LeaderboardType {
+        TOTAL_XP("Total Experience", "Sum of all action XP", Material.BOOK),
+        SPECIALIZATION("Top Specialization", "Highest XP in a single action", Material.ENCHANTED_BOOK);
         
         final String displayName;
         final String description;

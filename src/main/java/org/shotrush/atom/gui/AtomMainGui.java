@@ -3,8 +3,6 @@ package org.shotrush.atom.gui;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.shotrush.atom.Atom;
-import org.shotrush.atom.manager.PoliticalManager;
-import org.shotrush.atom.manager.ReputationManager;
 import org.shotrush.atom.model.PlayerData;
 
 import java.util.ArrayList;
@@ -20,20 +18,34 @@ public class AtomMainGui {
 
     public void open(Player player) {
         GuiFramework gui = GuiFramework.builder()
-            .title("Atom")
+            .title("§8§lAtom")
             .size(3)
             
-            .item(10, createStatsItem(player))
-            .item(11, createSpecializationsItem(player))
-            .item(12, createSocialItem(player))
-            .item(13, createRecipesItem(player))
-            .item(14, createEnvironmentItem(player))
-            .item(15, createLeaderboardItem(player))
-            .item(16, createPoliticalItem(player))
+            .item(11, createStatsItem(player))
+            .item(13, createSpecializationsItem(player))
+            .item(15, createRecipesItem(player))
             .item(22, createCloseItem())
+            
+            .item(0, createBorderItem())
+            .item(1, createBorderItem())
+            .item(7, createBorderItem())
+            .item(8, createBorderItem())
+            .item(9, createBorderItem())
+            .item(17, createBorderItem())
+            .item(18, createBorderItem())
+            .item(19, createBorderItem())
+            .item(25, createBorderItem())
+            .item(26, createBorderItem())
             .build();
 
         gui.open(player);
+    }
+    
+    private GuiFramework.GuiItem createBorderItem() {
+        return GuiFramework.GuiItem.builder()
+            .material(Material.GRAY_STAINED_GLASS_PANE)
+            .name(" ")
+            .build();
     }
 
     private GuiFramework.GuiItem createStatsItem(Player player) {
@@ -53,8 +65,9 @@ public class AtomMainGui {
             .limit(3)
             .forEach(entry -> {
                 double efficiency = plugin.getEmergentBonusManager().getSpeedMultiplier(player, entry.getKey());
+                String progressBar = getProgressBar(efficiency);
                 lore.add("§8• §f" + entry.getKey() + " §7" + 
-                    String.format("%.0f", entry.getValue()) + " §8(" + String.format("%.1fx", efficiency) + "§8");
+                    String.format("%.1fx", efficiency) + " " + progressBar);
             });
         
         
@@ -118,111 +131,29 @@ public class AtomMainGui {
             .build();
     }
 
-    private GuiFramework.GuiItem createSocialItem(Player player) {
-        ReputationManager repManager = plugin.getReputationManager();
-        
-        double socialCapital = repManager.getSocialCapital(player);
-        int tradingPartners = repManager.getTradingPartners(player).size();
-        double reputationBonus = repManager.getReputationBonus(player);
-        
-        List<String> lore = new ArrayList<>();
-        lore.add("Social Capital: " + String.format("%.1f", socialCapital));
-        lore.add("Trading Partners: " + tradingPartners);
-        lore.add("Reputation Bonus: +" + String.format("%.0f%%", reputationBonus * 100));
-        lore.add("");
-        lore.add("Build trade networks to gain");
-        lore.add("social capital and bonuses!");
-        lore.add("");
-        lore.add("Click to view social networks!");
-        
-        return GuiFramework.GuiItem.builder()
-            .material(Material.EMERALD)
-            .name("Social Capital")
-            .lore(lore)
-            .onClick(p -> new AtomSocialGui(plugin).open(p))
-            .build();
-    }
-
-    private GuiFramework.GuiItem createEnvironmentItem(Player player) {
-        plugin.getEnvironmentalManager().updatePlayerEnvironment(player);
-        double envBonus = plugin.getEnvironmentalManager().getEnvironmentalBonus(player);
-        double foodBonus = plugin.getEnvironmentalManager().getFoodSurplusBonus(player);
-        
-        List<String> lore = new ArrayList<>();
-        lore.add("Environment Bonus: " + String.format("%+.0f%%", envBonus * 100));
-        lore.add("Food Surplus Bonus: " + String.format("%+.0f%%", foodBonus * 100));
-        lore.add("");
-        lore.add("Your biome affects productivity!");
-        lore.add("Plains: +50%");
-        lore.add("Desert: -40%");
-        lore.add("");
-        lore.add("Click to view environmental details!");
-        
-        return GuiFramework.GuiItem.builder()
-            .material(Material.GRASS_BLOCK)
-            .name("Environment")
-            .lore(lore)
-            .onClick(p -> new AtomEnvironmentGui(plugin).open(p))
-            .build();
-    }
-
-    private GuiFramework.GuiItem createLeaderboardItem(Player player) {
-        List<String> lore = new ArrayList<>();
-        lore.add("View top players by:");
-        lore.add("Total Experience");
-        lore.add("Specialization Level");
-        lore.add("Social Capital");
-        lore.add("");
-        lore.add("Click to view leaderboards!");
-        
-        return GuiFramework.GuiItem.builder()
-            .material(Material.DIAMOND)
-            .name("Leaderboards")
-            .lore(lore)
-            .onClick(p -> new AtomLeaderboardGui(plugin).open(p))
-            .build();
-    }
-
-    private GuiFramework.GuiItem createPoliticalItem(Player player) {
-        PoliticalManager polManager = plugin.getPoliticalManager();
-        
-        boolean isBigMan = polManager.isBigMan(player);
-        PoliticalManager.AuthorityType authority = polManager.getAuthorityType(player);
-        double legitimacy = polManager.getLegitimacy(player);
-        
-        List<String> lore = new ArrayList<>();
-        
-        if (isBigMan) {
-            lore.add("Status: Big Man");
-            lore.add("Authority: " + authority.name());
-            lore.add("Legitimacy: " + String.format("%.0f%%", legitimacy * 100));
-            lore.add("");
-            lore.add("You are a recognized leader!");
-        } else {
-            lore.add("Status: Citizen");
-            lore.add("");
-            lore.add("Gain social capital and surplus");
-            lore.add("to become a leader!");
-        }
-        
-        lore.add("");
-        lore.add("Click to view political system!");
-        
-        return GuiFramework.GuiItem.builder()
-            .material(isBigMan ? Material.GOLDEN_HELMET : Material.IRON_HELMET)
-            .name("Political Status")
-            .lore(lore)
-            
-            .onClick(p -> new AtomPoliticalGui(plugin).open(p))
-            .build();
-    }
-
     private GuiFramework.GuiItem createCloseItem() {
         return GuiFramework.GuiItem.builder()
             .material(Material.BARRIER)
-            .name("Close")
-            .lore("Click to close this menu")
+            .name("§cClose")
+            .lore("§7Click to close this menu")
             .onClick(Player::closeInventory)
             .build();
+    }
+    
+    private String getProgressBar(double efficiency) {
+        double[] milestones = {1.0, 1.5, 2.0, 2.5};
+        for (int i = 0; i < milestones.length - 1; i++) {
+            if (efficiency >= milestones[i] && efficiency < milestones[i + 1]) {
+                double progress = (efficiency - milestones[i]) / (milestones[i + 1] - milestones[i]);
+                int filled = (int) (progress * 10);
+                StringBuilder bar = new StringBuilder("§8[");
+                for (int j = 0; j < 10; j++) {
+                    bar.append(j < filled ? "§a■" : "§7■");
+                }
+                bar.append("§8]");
+                return bar.toString();
+            }
+        }
+        return "§8[§a■■■■■■■■■■§8]"; // Max level
     }
 }
