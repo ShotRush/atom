@@ -1,4 +1,32 @@
 name: Atom
-version: '1.0-ALPHA'
+version: '${version}'
 main: org.shotrush.atom.Atom
 api-version: '1.21'
+author: ShotRush
+description: Atomized specialization plugin for emergent player-driven classes
+
+permissions:
+  atom.use:
+    description: Open the Atom GUI
+    default: true
+  atom.stats:
+    description: View your own statistics
+    default: true
+  atom.stats.others:
+    description: View other players' statistics
+    default: op
+  atom.actions:
+    description: List all available actions
+    default: true
+  atom.milestones:
+    description: View your milestones
+    default: true
+  atom.admin.reload:
+    description: Reload the plugin configuration
+    default: op
+  atom.admin.set:
+    description: Set player experience
+    default: op
+  atom.admin.add:
+    description: Add player experience
+    default: op
