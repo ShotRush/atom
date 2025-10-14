@@ -1,7 +1,6 @@
 package org.shotrush.atom.listener;
 
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.Sound;
@@ -13,12 +12,14 @@ import org.bukkit.event.inventory.CraftItemEvent;
 import org.bukkit.event.inventory.PrepareItemCraftEvent;
 import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.inventory.CraftingInventory;
+import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.shotrush.atom.Atom;
 import org.shotrush.atom.manager.CraftingProjectManager;
 
 import java.util.ArrayList;
 import java.util.List;
+
 
 public class CraftingProjectListener implements Listener {
     private final Atom plugin;
@@ -72,16 +73,50 @@ public class CraftingProjectListener implements Listener {
         ItemStack item = event.getItem();
         
         if (!craftingProjectManager.isCraftingProject(item)) return;
+
+        if(!(item.getAmount() == 1 || hasSpaceForItem(player, craftingProjectManager.getProjectResult(item)))) {
+            player.sendActionBar(Component.text("You don't have any free space"));
+            event.setCancelled(true);
+            return;
+        }
+
         completeConsumptionFromEvent(player, item);
     }
-    
+
+    private boolean hasSpaceForItem(Player player, Material referenceItem) {
+        Inventory inventory = player.getInventory();
+        ItemStack[] inventoryItems = inventory.getContents();
+
+        // after 35 start slots like armor, crafting square and offhand
+        final int inventoryLength = 36;
+
+        for (int index = 0; index < inventoryLength; index++) {
+            ItemStack currentSlot = inventoryItems[index];
+
+            if (currentSlot == null) {
+                return true;
+            }
+
+            if (isSpaceInItemStack(currentSlot, referenceItem)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isSpaceInItemStack(ItemStack item, Material material) {
+        return item.getType() == material && item.getMaxStackSize() > item.getAmount();
+    }
+
     private void completeConsumptionFromEvent(Player player, ItemStack project) {
         Material resultMaterial = craftingProjectManager.getProjectResult(project);
-        
+
         if (resultMaterial == null) {
             player.sendActionBar(Component.text("Invalid crafting project"));
             return;
         }
+
+
         
         double successChance = craftingProjectManager.calculateSuccessChance(player, resultMaterial);
         player.sendActionBar(Component.text(String.format("%.0f%% success chance", successChance * 100)));
@@ -90,7 +125,7 @@ public class CraftingProjectListener implements Listener {
         String actionId = craftingProjectManager.findCraftingAction(resultMaterial);
         double experience = result.isSuccess() ? 2.0 : 1.0;
         plugin.getActionManager().grantExperience(player, actionId, experience);
-        
+
         if (result.isSuccess()) {
             player.getInventory().addItem(result.getResult());
             player.sendActionBar(Component.text("Crafted " + formatMaterialName(resultMaterial)));
