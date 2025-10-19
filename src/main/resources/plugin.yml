@@ -2,8 +2,9 @@ name: Atom
 version: '${version}'
 main: org.shotrush.atom.Atom
 api-version: '1.21'
+folia-supported: true
 author: ShotRush
-description: Atomized specialization plugin for emergent player-driven classes
+description: Atomized specialization plugin for emergent player-driven classes with Folia support
 
 permissions:
   atom.use:

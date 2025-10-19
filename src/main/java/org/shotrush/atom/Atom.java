@@ -1,154 +1,269 @@
 package org.shotrush.atom;
 
 import co.aikar.commands.PaperCommandManager;
-import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.shotrush.atom.command.AtomCommand;
-import org.shotrush.atom.gui.GuiListener;
-import org.shotrush.atom.listener.ActionListener;
-import org.shotrush.atom.listener.CombatPenaltyListener;
-import org.shotrush.atom.listener.CraftingEfficiencyListener;
-import org.shotrush.atom.listener.CraftingFatigueListener;
-import org.shotrush.atom.listener.CraftingProjectListener;
-import org.shotrush.atom.listener.CropGrowthListener;
-import org.shotrush.atom.listener.DiscoveryListener;
-import org.shotrush.atom.listener.DynamicActionListener;
-import org.shotrush.atom.listener.EmergentBonusListener;
-import org.shotrush.atom.listener.ItemQualityListener;
-import org.shotrush.atom.listener.PlayerListener;
-import org.shotrush.atom.listener.RestrictionListener;
-import org.shotrush.atom.manager.*;
-import org.shotrush.atom.util.PDCKeys;
+import org.shotrush.atom.advancement.AdvancementGenerator;
+import org.shotrush.atom.commands.AtomCommand;
+import org.shotrush.atom.config.AtomConfig;
+import org.shotrush.atom.config.DefaultTrees;
+import org.shotrush.atom.config.TreeBuilder;
+import org.shotrush.atom.config.TreeDefinition;
+import org.shotrush.atom.effects.EffectManager;
+import org.shotrush.atom.effects.FeedbackManager;
+import org.shotrush.atom.engine.XpEngine;
+import org.shotrush.atom.features.ToolReinforcement;
+import org.shotrush.atom.features.XpTransfer;
+import org.shotrush.atom.listener.FeatureListener;
+import org.shotrush.atom.listener.PlayerConnectionListener;
+import org.shotrush.atom.listener.SkillEventListener;
+import org.shotrush.atom.manager.PlayerDataManager;
+import org.shotrush.atom.milestone.MilestoneManager;
+import org.shotrush.atom.storage.SQLiteStorage;
+import org.shotrush.atom.storage.StorageProvider;
+import org.shotrush.atom.tree.SkillTree;
+import org.shotrush.atom.tree.SkillTreeRegistry;
+
+import java.nio.file.Path;
+import java.util.List;
 
 public final class Atom extends JavaPlugin {
-    private ConfigManager configManager;
-    private PlayerDataManager playerDataManager;
-    private ActionManager actionManager;
-    private EmergentBonusManager emergentBonusManager;
-    private SkillTransferManager skillTransferManager;
-    private EnvironmentalManager environmentalManager;
-    private CognitiveCapacityManager cognitiveCapacityManager;
-    private DynamicActionManager dynamicActionManager;
-    private RecipeDiscoveryManager recipeDiscoveryManager;
-    private CraftingProjectManager craftingProjectManager;
-    private PaperCommandManager commandManager;
-    private PDCKeys pdcKeys;
-    private org.shotrush.atom.gui.SkillGUI skillGUI;
 
+    private AtomConfig config;
+    private StorageProvider storage;
+    private PlayerDataManager dataManager;
+    private SkillTreeRegistry treeRegistry;
+    private XpEngine xpEngine;
+    private EffectManager effectManager;
+    private FeedbackManager feedbackManager;
+    private MilestoneManager milestoneManager;
+    private AdvancementGenerator advancementGenerator;
+    private ToolReinforcement toolReinforcement;
+    private XpTransfer xpTransfer;
+    private PaperCommandManager commandManager;
+    
     @Override
     public void onEnable() {
-        saveDefaultConfig();
-        
-        pdcKeys = new PDCKeys(this);
-        configManager = new ConfigManager(this);
-        playerDataManager = new PlayerDataManager(this);
-        actionManager = new ActionManager(this, configManager, playerDataManager);
-        skillTransferManager = new SkillTransferManager(this, configManager, playerDataManager);
-        emergentBonusManager = new EmergentBonusManager(this, configManager, playerDataManager);
-        environmentalManager = new EnvironmentalManager(this);
-        cognitiveCapacityManager = new CognitiveCapacityManager(this, configManager);
-        dynamicActionManager = new DynamicActionManager(this, playerDataManager);
-        recipeDiscoveryManager = new RecipeDiscoveryManager(this, playerDataManager, emergentBonusManager);
-        craftingProjectManager = new CraftingProjectManager(this, configManager, emergentBonusManager);
-        skillGUI = new org.shotrush.atom.gui.SkillGUI(this);
-        
-        configManager.loadConfig();
-        skillTransferManager.loadConfig();
-        
-        registerListeners();
-        registerCommands();
-        startAutoSaveTask();
-        
-        getLogger().info("Atom has been enabled!");
+        getLogger().info("Initializing Atom plugin...");
+
+        try {
+            saveDefaultConfig();
+            loadConfiguration();
+            initializeStorage();
+            initializeTreeRegistry();
+            initializeManagers();
+            initializeFeatures();
+            registerListeners();
+            registerCommands();
+            startTasks();
+
+            getLogger().info("Atom has been enabled successfully!");
+        } catch (Exception e) {
+            getLogger().severe("Failed to enable Atom: " + e.getMessage());
+            e.printStackTrace();
+            getServer().getPluginManager().disablePlugin(this);
+        }
     }
 
     @Override
     public void onDisable() {
-        if (playerDataManager != null) {
-            playerDataManager.saveAllPlayerData();
+        getLogger().info("Shutting down Atom plugin...");
+
+        try {
+            if (commandManager != null) {
+                commandManager.unregisterCommands();
+            }
+            
+            if (dataManager != null) {
+                getLogger().info("Saving all player data...");
+                dataManager.saveAllPlayerData().join();
+            }
+
+            if (storage != null) {
+                getLogger().info("Closing database connection...");
+                storage.shutdown().join();
+            }
+
+            getLogger().info("Atom has been disabled successfully!");
+        } catch (Exception e) {
+            getLogger().severe("Error during shutdown: " + e.getMessage());
+            e.printStackTrace();
         }
-        getLogger().info("Atom has been disabled!");
+    }
+    
+    public void loadConfiguration() {
+        reloadConfig();
+        this.config = AtomConfig.loadFrom(getConfig());
+        getLogger().info("Configuration loaded");
+    }
+
+    private void initializeStorage() {
+        Path databasePath = getDataFolder().toPath().resolve("atom.db");
+        storage = new SQLiteStorage(databasePath);
+        storage.initialize().join();
+        getLogger().info("Database initialized at: " + databasePath);
+    }
+
+    private void initializeTreeRegistry() {
+        treeRegistry = new SkillTreeRegistry();
+
+        List<TreeDefinition> defaultTrees = DefaultTrees.createDefaultTrees();
+
+        for (TreeDefinition treeDef : defaultTrees) {
+            SkillTree tree = TreeBuilder.buildFromDefinition(treeDef);
+            treeRegistry.registerTree(tree);
+            getLogger().info("Registered skill tree: " + tree.name() + " (" + tree.size() + " nodes)");
+        }
+        
+        generateDatapack();
+    }
+    
+    private void generateDatapack() {
+        try {
+            java.io.File worldFolder = getServer().getWorlds().get(0).getWorldFolder();
+            java.io.File datapackFolder = new java.io.File(worldFolder, "datapacks/atom");
+            datapackFolder.mkdirs();
+            
+            java.io.File packMcmeta = new java.io.File(datapackFolder, "pack.mcmeta");
+            if (!packMcmeta.exists()) {
+                try (java.io.FileWriter writer = new java.io.FileWriter(packMcmeta)) {
+                    writer.write("{\n");
+                    writer.write("  \"pack\": {\n");
+                    writer.write("    \"pack_format\": 48,\n");
+                    writer.write("    \"description\": \"Atom Skill System Advancements\"\n");
+                    writer.write("  }\n");
+                    writer.write("}\n");
+                }
+                getLogger().info("Created pack.mcmeta for Atom datapack");
+            }
+        } catch (Exception e) {
+            getLogger().warning("Failed to create datapack structure: " + e.getMessage());
+        }
+    }
+
+    private void initializeManagers() {
+        dataManager = new PlayerDataManager(storage);
+        xpEngine = new XpEngine(treeRegistry);
+        effectManager = new EffectManager(this, config, xpEngine, treeRegistry);
+        feedbackManager = new FeedbackManager(config);
+        milestoneManager = new MilestoneManager(xpEngine, feedbackManager);
+        advancementGenerator = new AdvancementGenerator(this, xpEngine);
+        
+        for (SkillTree tree : treeRegistry.getAllTrees()) {
+            advancementGenerator.generateAdvancementsForTree(tree);
+        }
+        
+        advancementGenerator.generateMilestoneAdvancements(milestoneManager.getAllMilestones());
+        
+        getLogger().info("Managers initialized");
+        getLogger().info("Generated advancement files - reload datapacks with /reload");
+    }
+    
+    private void initializeFeatures() {
+        toolReinforcement = new ToolReinforcement(this);
+        xpTransfer = new XpTransfer(this);
+        
+        getLogger().info("Features initialized");
     }
 
     private void registerListeners() {
-        Bukkit.getPluginManager().registerEvents(new PlayerListener(this, playerDataManager), this);
-        Bukkit.getPluginManager().registerEvents(new ActionListener(this, configManager, actionManager), this);
-        Bukkit.getPluginManager().registerEvents(new RestrictionListener(this, configManager, actionManager), this);
-        Bukkit.getPluginManager().registerEvents(new EmergentBonusListener(this, configManager, emergentBonusManager, actionManager), this);
-        Bukkit.getPluginManager().registerEvents(new ItemQualityListener(this, configManager, emergentBonusManager), this);
-        Bukkit.getPluginManager().registerEvents(new DiscoveryListener(this, configManager, emergentBonusManager), this);
-        Bukkit.getPluginManager().registerEvents(new DynamicActionListener(this, dynamicActionManager), this);
-        Bukkit.getPluginManager().registerEvents(new CombatPenaltyListener(this, configManager, emergentBonusManager), this);
-        Bukkit.getPluginManager().registerEvents(new CraftingFatigueListener(this, configManager, emergentBonusManager), this);
-        Bukkit.getPluginManager().registerEvents(new CraftingEfficiencyListener(this, configManager, emergentBonusManager), this);
-        Bukkit.getPluginManager().registerEvents(new CraftingProjectListener(this, craftingProjectManager), this);
-        Bukkit.getPluginManager().registerEvents(new CropGrowthListener(this, environmentalManager), this);
-        Bukkit.getPluginManager().registerEvents(new GuiListener(), this);
-    }
+        getServer().getPluginManager().registerEvents(
+            new PlayerConnectionListener(dataManager),
+            this
+        );
 
+        getServer().getPluginManager().registerEvents(
+            new SkillEventListener(config, dataManager, xpEngine, feedbackManager, milestoneManager),
+            this
+        );
+        
+        getServer().getPluginManager().registerEvents(
+            new FeatureListener(config, dataManager, xpEngine, effectManager, feedbackManager, toolReinforcement, xpTransfer),
+            this
+        );
+        
+        getServer().getPluginManager().registerEvents(
+            effectManager.getRecipeManager(),
+            this
+        );
+
+        getLogger().info("Event listeners registered");
+    }
+    
     private void registerCommands() {
         commandManager = new PaperCommandManager(this);
         
-        commandManager.getCommandCompletions().registerCompletion("actions", c -> 
-            configManager.getActions().keySet());
+        commandManager.getCommandCompletions().registerCompletion("skills", c -> 
+            treeRegistry.getAllTrees().stream()
+                .flatMap(tree -> tree.getAllSkillIds().stream())
+                .toList()
+        );
         
-        commandManager.registerCommand(new AtomCommand(this, configManager, playerDataManager, actionManager));
+        commandManager.registerCommand(new AtomCommand(this));
+        
+        getLogger().info("Commands registered");
     }
 
-    private void startAutoSaveTask() {
-        long interval = getConfig().getLong("storage.auto-save-interval", 6000);
-        Bukkit.getScheduler().runTaskTimerAsynchronously(this, () -> {
-            if (playerDataManager != null) {
-                playerDataManager.saveAllPlayerData();
-            }
-        }, interval, interval);
+    private void startTasks() {
+        long saveInterval = 20L * config.autoSaveInterval();
+
+        getServer().getGlobalRegionScheduler().runAtFixedRate(this, task -> {
+            dataManager.saveAllPlayerData().thenRun(() ->
+                getLogger().info("Auto-saved data for " + dataManager.getCacheSize() + " players")
+            );
+        }, saveInterval, saveInterval);
+        
+        getServer().getGlobalRegionScheduler().runAtFixedRate(this, task -> {
+            getServer().getOnlinePlayers().forEach(player -> {
+                dataManager.getCachedPlayerData(player.getUniqueId()).ifPresent(data -> {
+                    effectManager.updatePlayerEffects(player, data);
+                });
+            });
+        }, 100L, 100L);
+
+        getLogger().info("Background tasks started");
+    }
+    
+    public AtomConfig getAtomConfig() {
+        return config;
     }
 
-    public ConfigManager getConfigManager() {
-        return configManager;
+    public PlayerDataManager getDataManager() {
+        return dataManager;
     }
 
-    public PlayerDataManager getPlayerDataManager() {
-        return playerDataManager;
+    public SkillTreeRegistry getTreeRegistry() {
+        return treeRegistry;
     }
 
-    public ActionManager getActionManager() {
-        return actionManager;
+    public XpEngine getXpEngine() {
+        return xpEngine;
     }
 
-    public EmergentBonusManager getEmergentBonusManager() {
-        return emergentBonusManager;
+    public StorageProvider getStorage() {
+        return storage;
     }
-
-    public PDCKeys getPDCKeys() {
-        return pdcKeys;
+    
+    public EffectManager getEffectManager() {
+        return effectManager;
     }
-
-    public SkillTransferManager getSkillTransferManager() {
-        return skillTransferManager;
+    
+    public FeedbackManager getFeedbackManager() {
+        return feedbackManager;
     }
-
-    public EnvironmentalManager getEnvironmentalManager() {
-        return environmentalManager;
+    
+    public MilestoneManager getMilestoneManager() {
+        return milestoneManager;
     }
-
-    public CognitiveCapacityManager getCognitiveCapacityManager() {
-        return cognitiveCapacityManager;
+    
+    public AdvancementGenerator getAdvancementGenerator() {
+        return advancementGenerator;
     }
-
-    public DynamicActionManager getDynamicActionManager() {
-        return dynamicActionManager;
+    
+    public ToolReinforcement getToolReinforcement() {
+        return toolReinforcement;
     }
-
-    public RecipeDiscoveryManager getRecipeDiscoveryManager() {
-        return recipeDiscoveryManager;
-    }
-
-    public CraftingProjectManager getCraftingProjectManager() {
-        return craftingProjectManager;
-    }
-
-    public org.shotrush.atom.gui.SkillGUI getSkillGUI() {
-        return skillGUI;
+    
+    public XpTransfer getXpTransfer() {
+        return xpTransfer;
     }
 }

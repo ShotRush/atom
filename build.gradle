@@ -22,12 +22,15 @@ repositories {
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.8-R0.1-SNAPSHOT")
     implementation("co.aikar:acf-paper:0.5.1-SNAPSHOT")
+    implementation("com.zaxxer:HikariCP:5.1.0")
+    implementation("org.xerial:sqlite-jdbc:3.46.1.0")
+    implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
+    implementation("org.yaml:snakeyaml:2.2")
 }
 
 tasks {
     runServer {
         // Configure the Minecraft version for our task.
-        // This is the only required configuration besides applying the plugin.
         // Your plugin's jar (or shadowJar if present) will be used automatically.
         minecraftVersion("1.21")
     }
@@ -63,6 +66,8 @@ processResources {
 shadowJar {
     relocate 'co.aikar.commands', 'org.shotrush.atom.acf'
     relocate 'co.aikar.locales', 'org.shotrush.atom.locales'
+    relocate 'com.zaxxer.hikari', 'org.shotrush.atom.hikari'
+    relocate 'com.github.benmanes.caffeine', 'org.shotrush.atom.caffeine'
     archiveClassifier.set('')
 }
 
