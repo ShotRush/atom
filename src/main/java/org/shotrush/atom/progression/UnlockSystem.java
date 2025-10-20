@@ -7,6 +7,7 @@ import org.shotrush.atom.model.PlayerSkillData;
 import org.shotrush.atom.model.SkillNode;
 
 import java.util.*;
+import java.util.HashMap;
 
 
 public final class UnlockSystem {
@@ -255,38 +256,48 @@ public final class UnlockSystem {
     private <T> boolean hasUnlock(Map<String, Set<T>> unlockMap, T item, 
             PlayerSkillData playerData, Map<String, SkillNode> allNodes) {
         
+        double maxUnlockScore = 0.0;
+        Map<String, Double> relatedSkillScores = new HashMap<>();
         
         for (String skillId : playerData.getAllIntrinsicXp().keySet()) {
             SkillNode node = allNodes.get(skillId);
             if (node == null) continue;
             
+            long xp = playerData.getAllIntrinsicXp().get(skillId);
+            double ratio = (double) xp / node.maxXp();
             
             Set<T> unlocks = unlockMap.get(skillId);
             if (unlocks != null && unlocks.contains(item)) {
-                
-                long xp = playerData.getAllIntrinsicXp().get(skillId);
-                double ratio = (double) xp / node.maxXp();
-                
-                
-                if (ratio >= 0.1) {
-                    return true;
+                double unlockScore = ratio;
+                if (xp > node.maxXp() * 1.2) {
+                    unlockScore += (xp / (double) node.maxXp() - 1.2) * 0.5;
                 }
+                maxUnlockScore = Math.max(maxUnlockScore, unlockScore);
+                relatedSkillScores.put(skillId, unlockScore);
             }
-            
             
             for (SkillNode ancestor : node.ancestors()) {
                 Set<T> ancestorUnlocks = unlockMap.get(ancestor.id());
                 if (ancestorUnlocks != null && ancestorUnlocks.contains(item)) {
                     long ancestorXp = playerData.getAllIntrinsicXp().getOrDefault(ancestor.id(), 0L);
                     double ancestorRatio = (double) ancestorXp / ancestor.maxXp();
-                    if (ancestorRatio >= 0.1) {
-                        return true;
-                    }
+                    double ancestorScore = ancestorRatio * 0.8;
+                    maxUnlockScore = Math.max(maxUnlockScore, ancestorScore);
+                    relatedSkillScores.put(ancestor.id(), ancestorScore);
                 }
             }
         }
         
-        return false;
+        if (relatedSkillScores.size() >= 2) {
+            double clusterBonus = relatedSkillScores.values().stream()
+                .sorted((a, b) -> Double.compare(b, a))
+                .limit(3)
+                .mapToDouble(s -> s * 0.2)
+                .sum();
+            maxUnlockScore += clusterBonus;
+        }
+        
+        return maxUnlockScore >= 0.1;
     }
     
     

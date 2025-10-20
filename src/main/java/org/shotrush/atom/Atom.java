@@ -39,6 +39,7 @@ public final class Atom extends JavaPlugin {
     private AdvancementGenerator advancementGenerator;
     private ToolReinforcement toolReinforcement;
     private XpTransfer xpTransfer;
+    private org.shotrush.atom.tree.MultiTreeAggregator multiTreeAggregator;
     private PaperCommandManager commandManager;
     
     @Override
@@ -114,35 +115,12 @@ public final class Atom extends JavaPlugin {
             getLogger().info("Registered skill tree: " + tree.name() + " (" + tree.size() + " nodes)");
         }
         
-        generateDatapack();
-    }
-    
-    private void generateDatapack() {
-        try {
-            java.io.File worldFolder = getServer().getWorlds().get(0).getWorldFolder();
-            java.io.File datapackFolder = new java.io.File(worldFolder, "datapacks/atom");
-            datapackFolder.mkdirs();
-            
-            java.io.File packMcmeta = new java.io.File(datapackFolder, "pack.mcmeta");
-            if (!packMcmeta.exists()) {
-                try (java.io.FileWriter writer = new java.io.FileWriter(packMcmeta)) {
-                    writer.write("{\n");
-                    writer.write("  \"pack\": {\n");
-                    writer.write("    \"pack_format\": 48,\n");
-                    writer.write("    \"description\": \"Atom Skill System Advancements\"\n");
-                    writer.write("  }\n");
-                    writer.write("}\n");
-                }
-                getLogger().info("Created pack.mcmeta for Atom datapack");
-            }
-        } catch (Exception e) {
-            getLogger().warning("Failed to create datapack structure: " + e.getMessage());
-        }
     }
 
     private void initializeManagers() {
         dataManager = new PlayerDataManager(storage);
-        xpEngine = new XpEngine(treeRegistry);
+        multiTreeAggregator = new org.shotrush.atom.tree.MultiTreeAggregator(treeRegistry);
+        xpEngine = new XpEngine(treeRegistry, multiTreeAggregator);
         effectManager = new EffectManager(this, config, xpEngine, treeRegistry);
         feedbackManager = new FeedbackManager(config);
         milestoneManager = new MilestoneManager(xpEngine, feedbackManager);
@@ -155,7 +133,7 @@ public final class Atom extends JavaPlugin {
         advancementGenerator.generateMilestoneAdvancements(milestoneManager.getAllMilestones());
         
         getLogger().info("Managers initialized");
-        getLogger().info("Generated advancement files - reload datapacks with /reload");
+        getLogger().info("Advancements loaded");
     }
     
     private void initializeFeatures() {
@@ -257,6 +235,10 @@ public final class Atom extends JavaPlugin {
     
     public AdvancementGenerator getAdvancementGenerator() {
         return advancementGenerator;
+    }
+    
+    public org.shotrush.atom.tree.MultiTreeAggregator getMultiTreeAggregator() {
+        return multiTreeAggregator;
     }
     
     public ToolReinforcement getToolReinforcement() {

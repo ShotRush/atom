@@ -12,9 +12,11 @@ public final class XpEngine {
     
     private final SkillTreeRegistry treeRegistry;
     private final XpCalculator calculator;
+    private final org.shotrush.atom.tree.MultiTreeAggregator aggregator;
     
-    public XpEngine(SkillTreeRegistry treeRegistry) {
+    public XpEngine(SkillTreeRegistry treeRegistry, org.shotrush.atom.tree.MultiTreeAggregator aggregator) {
         this.treeRegistry = Objects.requireNonNull(treeRegistry, "treeRegistry cannot be null");
+        this.aggregator = aggregator;
         this.calculator = new XpCalculator();
     }
     
@@ -37,6 +39,10 @@ public final class XpEngine {
         
         playerData.setIntrinsicXp(skillId, newXp);
         calculator.invalidateCache(playerData.playerId());
+        
+        if (aggregator != null) {
+            aggregator.updatePlayerWeights(playerData.playerId(), playerData);
+        }
     }
     
     public void setXp(PlayerSkillData playerData, String skillId, long amount) {
@@ -63,12 +69,43 @@ public final class XpEngine {
         Objects.requireNonNull(playerData, "playerData cannot be null");
         Objects.requireNonNull(skillId, "skillId cannot be null");
         
-        Optional<SkillNode> nodeOpt = treeRegistry.findNode(skillId);
-        if (nodeOpt.isEmpty()) {
+        List<SkillNode> nodes = treeRegistry.findAllNodes(skillId);
+        if (nodes.isEmpty()) {
             return EffectiveXp.zero();
         }
         
-        return calculator.calculateEffectiveXp(playerData, nodeOpt.get());
+        if (nodes.size() == 1) {
+            return calculator.calculateEffectiveXp(playerData, nodes.get(0));
+        }
+        
+        return aggregateMultiTreeXp(playerData, nodes);
+    }
+    
+    private EffectiveXp aggregateMultiTreeXp(PlayerSkillData playerData, List<SkillNode> nodes) {
+        if (aggregator == null) {
+            return calculator.calculateEffectiveXp(playerData, nodes.get(0));
+        }
+        
+        Map<SkillTree, EffectiveXp> treeXpValues = new HashMap<>();
+        
+        for (SkillNode node : nodes) {
+            SkillTree tree = findTreeForNode(node);
+            if (tree == null) continue;
+            
+            EffectiveXp xp = calculator.calculateEffectiveXp(playerData, node);
+            treeXpValues.put(tree, xp);
+        }
+        
+        return aggregator.aggregateXp(playerData.playerId(), nodes.get(0).id(), treeXpValues);
+    }
+    
+    private SkillTree findTreeForNode(SkillNode node) {
+        for (SkillTree tree : treeRegistry.getAllTrees()) {
+            if (tree.getNode(node.id()).isPresent()) {
+                return tree;
+            }
+        }
+        return null;
     }
     
     public Map<String, EffectiveXp> getAllEffectiveXp(PlayerSkillData playerData, SkillTree tree) {

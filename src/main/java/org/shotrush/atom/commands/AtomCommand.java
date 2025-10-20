@@ -81,6 +81,10 @@ public final class AtomCommand extends BaseCommand {
                 .append(Component.text(effectiveXp.honoraryXp(), NamedTextColor.YELLOW))
                 .append(Component.text(" XP)", NamedTextColor.DARK_GRAY));
             
+            if (effectiveXp.honoraryXp() > effectiveXp.intrinsicXp() * 0.5) {
+                skillLine = skillLine.append(Component.text(" ⚡", NamedTextColor.GOLD));
+            }
+            
             viewer.sendMessage(skillLine);
         }
         

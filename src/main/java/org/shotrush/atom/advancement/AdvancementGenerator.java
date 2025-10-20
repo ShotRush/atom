@@ -1,8 +1,5 @@
 package org.shotrush.atom.advancement;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonObject;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -15,9 +12,6 @@ import org.shotrush.atom.model.PlayerSkillData;
 import org.shotrush.atom.model.SkillNode;
 import org.shotrush.atom.tree.SkillTree;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -26,63 +20,47 @@ public final class AdvancementGenerator {
     private final Plugin plugin;
     private final XpEngine xpEngine;
     private final Map<String, NamespacedKey> skillAdvancementKeys;
-    private final Gson gson;
-    private final File advancementFolder;
     
     public AdvancementGenerator(Plugin plugin, XpEngine xpEngine) {
         this.plugin = plugin;
         this.xpEngine = xpEngine;
         this.skillAdvancementKeys = new HashMap<>();
-        this.gson = new GsonBuilder().setPrettyPrinting().create();
-        
-        File worldFolder = Bukkit.getWorlds().get(0).getWorldFolder();
-        this.advancementFolder = new File(worldFolder, "datapacks/atom/data/atom/advancements");
-        advancementFolder.mkdirs();
     }
     
     public void generateAdvancementsForTree(SkillTree tree) {
         generateNodeAdvancement(tree.root(), null);
+        plugin.getLogger().info("Generated " + skillAdvancementKeys.size() + " advancements for tree: " + tree.name());
     }
     
     public void generateMilestoneAdvancements(java.util.List<org.shotrush.atom.milestone.Milestone> milestones) {
+        int count = 0;
         for (org.shotrush.atom.milestone.Milestone milestone : milestones) {
             generateMilestoneAdvancement(milestone);
+            count++;
         }
+        plugin.getLogger().info("Generated " + count + " milestone advancements");
     }
     
     private void generateMilestoneAdvancement(org.shotrush.atom.milestone.Milestone milestone) {
-        JsonObject advancement = new JsonObject();
+        String path = "milestones/" + milestone.id();
+        NamespacedKey key = new NamespacedKey(plugin, path);
         
-        JsonObject display = new JsonObject();
+        String parentPath = milestone.skillId().replace(".", "/");
+        String icon = getMaterialForMilestone(milestone.skillId());
+        String frame = getFrameForMilestone(milestone);
         
-        JsonObject icon = new JsonObject();
-        icon.addProperty("item", getMaterialForMilestone(milestone.skillId()));
-        display.add("icon", icon);
+        String json = buildAdvancementJson(
+            icon,
+            "§6" + milestone.displayName(),
+            milestone.description() + " (" + (int)milestone.requiredLevel() + "% progress)",
+            frame,
+            "atom:" + parentPath,
+            true,
+            true
+        );
         
-        JsonObject title = new JsonObject();
-        title.addProperty("text", "§6" + milestone.displayName());
-        display.add("title", title);
-        
-        JsonObject description = new JsonObject();
-        description.addProperty("text", milestone.description() + " (" + (int)milestone.requiredLevel() + "% progress)");
-        display.add("description", description);
-        
-        display.addProperty("frame", getFrameForMilestone(milestone));
-        display.addProperty("show_toast", true);
-        display.addProperty("announce_to_chat", true);
-        
-        advancement.add("display", display);
-        
-        String parentSkillId = milestone.skillId();
-        advancement.addProperty("parent", "atom:" + parentSkillId.replace(".", "/"));
-        
-        JsonObject criteria = new JsonObject();
-        JsonObject impossibleCriteria = new JsonObject();
-        impossibleCriteria.addProperty("trigger", "minecraft:impossible");
-        criteria.add("impossible", impossibleCriteria);
-        advancement.add("criteria", criteria);
-        
-        saveAdvancement("milestones/" + milestone.id(), advancement);
+        loadAdvancement(key, json);
+        skillAdvancementKeys.put("milestones/" + milestone.id(), key);
     }
     
     private String getFrameForMilestone(org.shotrush.atom.milestone.Milestone milestone) {
@@ -113,52 +91,88 @@ public final class AdvancementGenerator {
     }
     
     private void generateNodeAdvancement(SkillNode node, String parentId) {
-        JsonObject advancement = new JsonObject();
+        String path = node.id().replace(".", "/");
+        NamespacedKey key = new NamespacedKey(plugin, path);
         
-        JsonObject display = createDisplay(node, parentId == null);
-        advancement.add("display", display);
+        String icon = getMaterialForNode(node).getKey().toString();
+        String title = formatTitle(node.id());
+        String description = generateDescription(node);
+        String frame = getFrameType(node);
+        String parent = parentId != null ? "atom:" + parentId.replace(".", "/") : null;
+        boolean isRoot = parentId == null;
         
-        if (parentId != null) {
-            advancement.addProperty("parent", "atom:" + parentId.replace(".", "/"));
-        }
+        String json = buildAdvancementJson(icon, title, description, frame, parent, true, true, isRoot);
         
-        JsonObject criteria = new JsonObject();
-        JsonObject impossibleCriteria = new JsonObject();
-        impossibleCriteria.addProperty("trigger", "minecraft:impossible");
-        criteria.add("impossible", impossibleCriteria);
-        advancement.add("criteria", criteria);
-        
-        saveAdvancement(node.id(), advancement);
+        loadAdvancement(key, json);
+        skillAdvancementKeys.put(node.id(), key);
         
         for (SkillNode child : node.children().values()) {
             generateNodeAdvancement(child, node.id());
         }
     }
     
-    private JsonObject createDisplay(SkillNode node, boolean isRoot) {
-        JsonObject display = new JsonObject();
-        
-        JsonObject icon = new JsonObject();
-        icon.addProperty("item", getMaterialForNode(node).getKey().toString());
-        display.add("icon", icon);
-        
-        JsonObject title = new JsonObject();
-        title.addProperty("text", formatTitle(node.id()));
-        display.add("title", title);
-        
-        JsonObject description = new JsonObject();
-        description.addProperty("text", generateDescription(node));
-        display.add("description", description);
-        
-        display.addProperty("frame", getFrameType(node));
-        display.addProperty("show_toast", true);
-        display.addProperty("announce_to_chat", true);
+    @SuppressWarnings("deprecation")
+    private void loadAdvancement(NamespacedKey key, String json) {
+        try {
+            Bukkit.getUnsafe().loadAdvancement(key, json);
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to load advancement " + key + ": " + e.getMessage());
+        }
+    }
+    
+    private String buildAdvancementJson(String icon, String title, String description, String frame, 
+                                       String parent, boolean showToast, boolean announceToChat) {
+        return buildAdvancementJson(icon, title, description, frame, parent, showToast, announceToChat, false);
+    }
+    
+    private String buildAdvancementJson(String icon, String title, String description, String frame, 
+                                       String parent, boolean showToast, boolean announceToChat, boolean isRoot) {
+        StringBuilder json = new StringBuilder();
+        json.append("{\n");
+        json.append("  \"criteria\": {\n");
+        json.append("    \"trigger\": {\n");
+        json.append("      \"trigger\": \"minecraft:impossible\"\n");
+        json.append("    }\n");
+        json.append("  },\n");
+        json.append("  \"display\": {\n");
+        json.append("    \"icon\": {\n");
+        json.append("      \"id\": \"").append(icon).append("\"\n");
+        json.append("    },\n");
+        json.append("    \"title\": {\n");
+        json.append("      \"text\": \"").append(escapeJson(title)).append("\"\n");
+        json.append("    },\n");
+        json.append("    \"description\": {\n");
+        json.append("      \"text\": \"").append(escapeJson(description)).append("\"\n");
+        json.append("    },\n");
         
         if (isRoot) {
-            display.addProperty("background", "minecraft:textures/gui/advancements/backgrounds/stone.png");
+            json.append("    \"background\": \"minecraft:textures/block/deepslate.png\",\n");
         }
         
-        return display;
+        json.append("    \"frame\": \"").append(frame).append("\",\n");
+        json.append("    \"announce_to_chat\": ").append(announceToChat).append(",\n");
+        json.append("    \"show_toast\": ").append(showToast).append(",\n");
+        json.append("    \"hidden\": false\n");
+        json.append("  }");
+        
+        if (parent != null) {
+            json.append(",\n  \"parent\": \"").append(parent).append("\"");
+        }
+        
+        json.append(",\n  \"requirements\": [\n");
+        json.append("    [\"trigger\"]\n");
+        json.append("  ]\n");
+        json.append("}");
+        
+        return json.toString();
+    }
+    
+    private String escapeJson(String text) {
+        return text.replace("\\", "\\\\")
+                   .replace("\"", "\\\"")
+                   .replace("\n", "\\n")
+                   .replace("\r", "\\r")
+                   .replace("\t", "\\t");
     }
     
     private String getFrameType(SkillNode node) {
@@ -262,30 +276,14 @@ public final class AdvancementGenerator {
         }
     }
     
-    private void saveAdvancement(String skillId, JsonObject advancement) {
-        String path = skillId.replace(".", "/");
-        File file = new File(advancementFolder, path + ".json");
-        file.getParentFile().mkdirs();
-        
-        try (FileWriter writer = new FileWriter(file)) {
-            gson.toJson(advancement, writer);
-            NamespacedKey key = NamespacedKey.fromString("atom:" + path);
-            if (key != null) {
-                skillAdvancementKeys.put(skillId, key);
-            }
-            plugin.getLogger().info("Generated advancement: atom:" + path + " at " + file.getAbsolutePath());
-        } catch (IOException e) {
-            plugin.getLogger().warning("Failed to save advancement for " + skillId + ": " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-    
     public void updatePlayerAdvancements(Player player, PlayerSkillData data, SkillTree tree) {
         updateNodeAdvancements(player, data, tree.root());
     }
     
     private void updateNodeAdvancements(Player player, PlayerSkillData data, SkillNode node) {
-        NamespacedKey key = getOrCreateKey(node.id());
+        NamespacedKey key = skillAdvancementKeys.get(node.id());
+        if (key == null) return;
+        
         Advancement advancement = Bukkit.getAdvancement(key);
         
         if (advancement != null) {
@@ -293,11 +291,12 @@ public final class AdvancementGenerator {
             double progress = effectiveXp.progressPercent();
             
             var advancementProgress = player.getAdvancementProgress(advancement);
+            boolean wasCompleted = advancementProgress.isDone();
             
             if (progress >= 1.0) {
-                for (String criteria : advancement.getCriteria()) {
-                    advancementProgress.awardCriteria(criteria);
-                }
+                advancementProgress.awardCriteria("trigger");
+            } else {
+                advancementProgress.revokeCriteria("trigger");
             }
         }
         
@@ -306,19 +305,12 @@ public final class AdvancementGenerator {
         }
     }
     
-    private NamespacedKey getOrCreateKey(String skillId) {
-        return skillAdvancementKeys.computeIfAbsent(skillId, 
-            id -> NamespacedKey.fromString("atom:" + id.replace(".", "/")));
-    }
-    
     public void clearPlayerAdvancements(Player player) {
         for (NamespacedKey key : skillAdvancementKeys.values()) {
             Advancement advancement = Bukkit.getAdvancement(key);
             if (advancement != null) {
                 var progress = player.getAdvancementProgress(advancement);
-                for (String criteria : advancement.getCriteria()) {
-                    progress.revokeCriteria(criteria);
-                }
+                progress.revokeCriteria("trigger");
             }
         }
     }

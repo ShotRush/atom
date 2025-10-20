@@ -108,8 +108,18 @@ public final class DefaultTrees {
                     30000,
                     "BRANCH",
                     List.of(
-                        new TreeDefinition.NodeDefinition("guardsman.combat.kill_zombie", "Slay Zombies", 10000, "LEAF", null),
-                        new TreeDefinition.NodeDefinition("guardsman.combat.kill_skeleton", "Slay Skeletons", 10000, "LEAF", null),
+                        new TreeDefinition.NodeDefinition("guardsman.combat.kill_zombie", "Slay Zombies", 10000, "BRANCH",
+                            List.of(
+                                new TreeDefinition.NodeDefinition("guardsman.combat.kill_zombie.melee", "Melee Combat", 5000, "LEAF", null),
+                                new TreeDefinition.NodeDefinition("guardsman.combat.kill_zombie.ranged", "Ranged Combat", 5000, "LEAF", null)
+                            )
+                        ),
+                        new TreeDefinition.NodeDefinition("guardsman.combat.kill_skeleton", "Slay Skeletons", 10000, "BRANCH",
+                            List.of(
+                                new TreeDefinition.NodeDefinition("guardsman.combat.kill_skeleton.bow", "Bow Combat", 5000, "LEAF", null),
+                                new TreeDefinition.NodeDefinition("guardsman.combat.kill_skeleton.crossbow", "Crossbow Combat", 5000, "LEAF", null)
+                            )
+                        ),
                         new TreeDefinition.NodeDefinition("guardsman.combat.kill_spider", "Slay Spiders", 10000, "LEAF", null),
                         new TreeDefinition.NodeDefinition("guardsman.combat.kill_creeper", "Slay Creepers", 10000, "LEAF", null)
                     )
@@ -155,9 +165,24 @@ public final class DefaultTrees {
                     List.of(
                         new TreeDefinition.NodeDefinition("miner.ore_mining.coal", "Mine Coal", 6000, "LEAF", null),
                         new TreeDefinition.NodeDefinition("miner.ore_mining.copper", "Mine Copper", 6000, "LEAF", null),
-                        new TreeDefinition.NodeDefinition("miner.ore_mining.iron", "Mine Iron", 6000, "LEAF", null),
-                        new TreeDefinition.NodeDefinition("miner.ore_mining.gold", "Mine Gold", 6000, "LEAF", null),
-                        new TreeDefinition.NodeDefinition("miner.ore_mining.diamond", "Mine Diamond", 6000, "LEAF", null)
+                        new TreeDefinition.NodeDefinition("miner.ore_mining.iron", "Mine Iron", 6000, "BRANCH",
+                            List.of(
+                                new TreeDefinition.NodeDefinition("miner.ore_mining.iron.overworld", "Overworld Iron", 3000, "LEAF", null),
+                                new TreeDefinition.NodeDefinition("miner.ore_mining.iron.deepslate", "Deepslate Iron", 3000, "LEAF", null)
+                            )
+                        ),
+                        new TreeDefinition.NodeDefinition("miner.ore_mining.gold", "Mine Gold", 6000, "BRANCH",
+                            List.of(
+                                new TreeDefinition.NodeDefinition("miner.ore_mining.gold.overworld", "Overworld Gold", 3000, "LEAF", null),
+                                new TreeDefinition.NodeDefinition("miner.ore_mining.gold.nether", "Nether Gold", 3000, "LEAF", null)
+                            )
+                        ),
+                        new TreeDefinition.NodeDefinition("miner.ore_mining.diamond", "Mine Diamond", 6000, "BRANCH",
+                            List.of(
+                                new TreeDefinition.NodeDefinition("miner.ore_mining.diamond.cave", "Cave Mining", 3000, "LEAF", null),
+                                new TreeDefinition.NodeDefinition("miner.ore_mining.diamond.strip", "Strip Mining", 3000, "LEAF", null)
+                            )
+                        )
                     )
                 )
             )
@@ -209,8 +234,18 @@ public final class DefaultTrees {
                     25000,
                     "BRANCH",
                     List.of(
-                        new TreeDefinition.NodeDefinition("blacksmith.tool_crafting.pickaxes", "Craft Pickaxes", 8000, "LEAF", null),
-                        new TreeDefinition.NodeDefinition("blacksmith.tool_crafting.axes", "Craft Axes", 8000, "LEAF", null),
+                        new TreeDefinition.NodeDefinition("blacksmith.tool_crafting.pickaxes", "Craft Pickaxes", 8000, "BRANCH",
+                            List.of(
+                                new TreeDefinition.NodeDefinition("blacksmith.tool_crafting.pickaxes.iron", "Iron Pickaxes", 4000, "LEAF", null),
+                                new TreeDefinition.NodeDefinition("blacksmith.tool_crafting.pickaxes.diamond", "Diamond Pickaxes", 4000, "LEAF", null)
+                            )
+                        ),
+                        new TreeDefinition.NodeDefinition("blacksmith.tool_crafting.axes", "Craft Axes", 8000, "BRANCH",
+                            List.of(
+                                new TreeDefinition.NodeDefinition("blacksmith.tool_crafting.axes.iron", "Iron Axes", 4000, "LEAF", null),
+                                new TreeDefinition.NodeDefinition("blacksmith.tool_crafting.axes.diamond", "Diamond Axes", 4000, "LEAF", null)
+                            )
+                        ),
                         new TreeDefinition.NodeDefinition("blacksmith.tool_crafting.shovels", "Craft Shovels", 8000, "LEAF", null),
                         new TreeDefinition.NodeDefinition("blacksmith.tool_crafting.hoes", "Craft Hoes", 8000, "LEAF", null)
                     )

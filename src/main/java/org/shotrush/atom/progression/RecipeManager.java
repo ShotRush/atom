@@ -1,6 +1,7 @@
 package org.shotrush.atom.progression;
 
 import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -105,8 +106,32 @@ public final class RecipeManager implements Listener {
     
     
     private boolean checkRecipeUnlock(Player player, PlayerSkillData playerData, Map<String, SkillNode> allNodes, Recipe recipe) {
+        Material result = recipe.getResult().getType();
         
-        return unlockSystem.canCraft(player, recipe.getResult().getType(), playerData, allNodes);
+        double totalSkillScore = 0.0;
+        int relevantSkills = 0;
+        
+        for (Map.Entry<String, Long> entry : playerData.getAllIntrinsicXp().entrySet()) {
+            SkillNode node = allNodes.get(entry.getKey());
+            if (node == null) continue;
+            
+            double ratio = entry.getValue() / (double) node.maxXp();
+            
+            if (ratio > 0.5 && node.depth() >= 2) {
+                totalSkillScore += ratio;
+                relevantSkills++;
+                
+                if (ratio > 1.5) {
+                    totalSkillScore += (ratio - 1.5) * 0.5;
+                }
+            }
+        }
+        
+        if (relevantSkills >= 2 && totalSkillScore > 1.5) {
+            return true;
+        }
+        
+        return unlockSystem.canCraft(player, result, playerData, allNodes);
     }
     
     
