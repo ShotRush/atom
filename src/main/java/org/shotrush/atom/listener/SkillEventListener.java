@@ -16,6 +16,7 @@ import org.bukkit.event.inventory.CraftItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.ItemStack;
 import org.shotrush.atom.config.AtomConfig;
+import org.shotrush.atom.detection.CraftDetection;
 import org.shotrush.atom.effects.FeedbackManager;
 import org.shotrush.atom.engine.XpEngine;
 import org.shotrush.atom.manager.PlayerDataManager;
@@ -225,7 +226,7 @@ public final class SkillEventListener implements Listener {
         ItemStack result = event.getRecipe().getResult();
         Material type = result.getType();
         
-        int craftedAmount = calculateCraftedAmount(event);
+        int craftedAmount = CraftDetection.calculateCraftedAmount(event);
         String skillId = getCraftingSkillId(type);
         
         if (skillId != null) {
@@ -237,29 +238,6 @@ public final class SkillEventListener implements Listener {
         for (var tree : treeRegistry.getAllTrees()) {
             advancementGenerator.updatePlayerAdvancements(player, data, tree);
         }
-    }
-    
-    private int calculateCraftedAmount(CraftItemEvent event) {
-        if (event.isShiftClick()) {
-            ItemStack result = event.getRecipe().getResult();
-            int maxCraftable = getMaxCraftableAmount(event, result);
-            return Math.max(1, maxCraftable);
-        }
-        return 1;
-    }
-    
-    private int getMaxCraftableAmount(CraftItemEvent event, ItemStack result) {
-        org.bukkit.inventory.CraftingInventory craftingInv = event.getInventory();
-        ItemStack[] matrix = craftingInv.getMatrix();
-        
-        int minStackSize = Integer.MAX_VALUE;
-        for (ItemStack item : matrix) {
-            if (item != null && !item.getType().isAir()) {
-                minStackSize = Math.min(minStackSize, item.getAmount());
-            }
-        }
-        
-        return minStackSize == Integer.MAX_VALUE ? 1 : minStackSize;
     }
     
     private String getCraftingSkillId(Material type) {

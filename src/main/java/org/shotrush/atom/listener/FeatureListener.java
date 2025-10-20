@@ -11,6 +11,7 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerItemDamageEvent;
 import org.bukkit.inventory.ItemStack;
 import org.shotrush.atom.config.AtomConfig;
+import org.shotrush.atom.detection.CraftDetection;
 import org.shotrush.atom.effects.EffectManager;
 import org.shotrush.atom.effects.FeedbackManager;
 import org.shotrush.atom.engine.XpEngine;
@@ -102,8 +103,8 @@ public final class FeatureListener implements Listener {
         
         ItemStack result = event.getRecipe().getResult();
         
-        if (config.enableToolReinforcement() && isStoneToolCraft(result.getType())) {
-            if (hasIronInIngredients(event)) {
+        if (config.enableToolReinforcement() && CraftDetection.isStoneToolCraft(result.getType())) {
+            if (CraftDetection.hasIronInIngredients(event)) {
                 event.setCurrentItem(toolReinforcement.reinforce(result));
             }
         }
@@ -146,20 +147,5 @@ public final class FeatureListener implements Listener {
         if (name.contains("AXE") && !name.contains("PICKAXE")) return "builder";
         if (name.contains("SHOVEL")) return "builder";
         return null;
-    }
-    
-    private boolean isStoneToolCraft(Material material) {
-        return material == Material.STONE_PICKAXE || material == Material.STONE_AXE ||
-               material == Material.STONE_SHOVEL || material == Material.STONE_HOE ||
-               material == Material.STONE_SWORD;
-    }
-    
-    private boolean hasIronInIngredients(CraftItemEvent event) {
-        for (ItemStack ingredient : event.getInventory().getMatrix()) {
-            if (ingredient != null && ingredient.getType() == Material.IRON_INGOT) {
-                return true;
-            }
-        }
-        return false;
     }
 }
