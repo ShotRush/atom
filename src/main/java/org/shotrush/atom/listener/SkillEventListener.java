@@ -225,16 +225,45 @@ public final class SkillEventListener implements Listener {
         ItemStack result = event.getRecipe().getResult();
         Material type = result.getType();
         
-        handleToolCrafting(data, type);
-        handleArmorCrafting(data, type);
+        int craftedAmount = calculateCraftedAmount(event);
+        String skillId = getCraftingSkillId(type);
+        
+        if (skillId != null) {
+            String xpRateKey = skillId.contains("tool_crafting") ? "crafting.tool" : "crafting.armor";
+            int xpAmount = config.getXpRate(xpRateKey) * craftedAmount;
+            xpEngine.awardXp(data, skillId, xpAmount);
+        }
         
         for (var tree : treeRegistry.getAllTrees()) {
             advancementGenerator.updatePlayerAdvancements(player, data, tree);
         }
     }
     
-    private void handleToolCrafting(PlayerSkillData data, Material type) {
-        String skillId = switch (type) {
+    private int calculateCraftedAmount(CraftItemEvent event) {
+        if (event.isShiftClick()) {
+            ItemStack result = event.getRecipe().getResult();
+            int maxCraftable = getMaxCraftableAmount(event, result);
+            return Math.max(1, maxCraftable);
+        }
+        return 1;
+    }
+    
+    private int getMaxCraftableAmount(CraftItemEvent event, ItemStack result) {
+        org.bukkit.inventory.CraftingInventory craftingInv = event.getInventory();
+        ItemStack[] matrix = craftingInv.getMatrix();
+        
+        int minStackSize = Integer.MAX_VALUE;
+        for (ItemStack item : matrix) {
+            if (item != null && !item.getType().isAir()) {
+                minStackSize = Math.min(minStackSize, item.getAmount());
+            }
+        }
+        
+        return minStackSize == Integer.MAX_VALUE ? 1 : minStackSize;
+    }
+    
+    private String getCraftingSkillId(Material type) {
+        return switch (type) {
             case WOODEN_PICKAXE, STONE_PICKAXE, IRON_PICKAXE, GOLDEN_PICKAXE, DIAMOND_PICKAXE, NETHERITE_PICKAXE -> 
                 "blacksmith.tool_crafting.pickaxes";
             case WOODEN_AXE, STONE_AXE, IRON_AXE, GOLDEN_AXE, DIAMOND_AXE, NETHERITE_AXE -> 
@@ -243,17 +272,6 @@ public final class SkillEventListener implements Listener {
                 "blacksmith.tool_crafting.shovels";
             case WOODEN_HOE, STONE_HOE, IRON_HOE, GOLDEN_HOE, DIAMOND_HOE, NETHERITE_HOE -> 
                 "blacksmith.tool_crafting.hoes";
-            default -> null;
-        };
-        
-        if (skillId != null) {
-            int xpAmount = config.getXpRate("crafting.tool");
-            xpEngine.awardXp(data, skillId, xpAmount);
-        }
-    }
-    
-    private void handleArmorCrafting(PlayerSkillData data, Material type) {
-        String skillId = switch (type) {
             case LEATHER_HELMET, CHAINMAIL_HELMET, IRON_HELMET, GOLDEN_HELMET, DIAMOND_HELMET, NETHERITE_HELMET -> 
                 "blacksmith.armor_crafting.helmets";
             case LEATHER_CHESTPLATE, CHAINMAIL_CHESTPLATE, IRON_CHESTPLATE, GOLDEN_CHESTPLATE, DIAMOND_CHESTPLATE, NETHERITE_CHESTPLATE -> 
@@ -264,11 +282,6 @@ public final class SkillEventListener implements Listener {
                 "blacksmith.armor_crafting.boots";
             default -> null;
         };
-        
-        if (skillId != null) {
-            int xpAmount = config.getXpRate("crafting.armor");
-            xpEngine.awardXp(data, skillId, xpAmount);
-        }
     }
     
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
