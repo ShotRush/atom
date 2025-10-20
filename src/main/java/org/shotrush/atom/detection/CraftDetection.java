@@ -1,10 +1,12 @@
 package org.shotrush.atom.detection;
 
 import org.bukkit.Material;
+import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.CraftItemEvent;
 import org.bukkit.inventory.CraftingInventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 
 public final class CraftDetection {
     
@@ -14,7 +16,8 @@ public final class CraftDetection {
         if (isShiftClickCraft(event)) {
             ItemStack result = event.getRecipe().getResult();
             int maxCraftable = getMaxCraftableAmount(event, result);
-            return Math.max(1, maxCraftable);
+            int maxFittable = getMaxFittableAmount(event, result);
+            return Math.min(maxCraftable, maxFittable);
         }
         
         if (isDragCraft(event)) {
@@ -48,6 +51,42 @@ public final class CraftDetection {
         return click == ClickType.NUMBER_KEY;
     }
     
+    public static boolean canCraftSucceed(CraftItemEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)) return false;
+        
+        ItemStack result = event.getRecipe().getResult();
+        PlayerInventory inv = player.getInventory();
+        ItemStack cursor = event.getCursor();
+        
+        if (cursor != null && !cursor.getType().isAir()) {
+            if (isLeftClickCraft(event) || isRightClickCraft(event)) {
+                if (!cursor.isSimilar(result)) {
+                    return false;
+                }
+                
+                if (cursor.getAmount() + result.getAmount() > cursor.getMaxStackSize()) {
+                    return false;
+                }
+            }
+        }
+        
+        if (isNumberKeyCraft(event)) {
+            int hotbarSlot = event.getHotbarButton();
+            if (hotbarSlot < 0 || hotbarSlot > 8) return true;
+            
+            ItemStack slotItem = inv.getItem(hotbarSlot);
+            if (slotItem == null || slotItem.getType().isAir()) return true;
+            
+            if (!slotItem.isSimilar(result)) return false;
+            
+            if (slotItem.getAmount() + result.getAmount() > slotItem.getMaxStackSize()) {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+    
     public static int getMaxCraftableAmount(CraftItemEvent event, ItemStack result) {
         CraftingInventory craftingInv = event.getInventory();
         ItemStack[] matrix = craftingInv.getMatrix();
@@ -60,6 +99,28 @@ public final class CraftDetection {
         }
         
         return minStackSize == Integer.MAX_VALUE ? 1 : minStackSize;
+    }
+    
+    public static int getMaxFittableAmount(CraftItemEvent event, ItemStack result) {
+        if (!(event.getWhoClicked() instanceof Player player)) return 0;
+        
+        PlayerInventory inv = player.getInventory();
+        int resultAmount = result.getAmount();
+        int maxStack = result.getMaxStackSize();
+        int totalSpace = 0;
+        
+        for (ItemStack item : inv.getStorageContents()) {
+            if (item == null || item.getType().isAir()) {
+                totalSpace += maxStack;
+            } else if (item.isSimilar(result)) {
+                int spaceInStack = maxStack - item.getAmount();
+                totalSpace += spaceInStack;
+            }
+        }
+        
+        if (totalSpace == 0) return 0;
+        
+        return (int) Math.ceil((double) totalSpace / resultAmount);
     }
     
     public static boolean hasMaterialInIngredients(CraftItemEvent event, Material material) {

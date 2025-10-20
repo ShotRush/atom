@@ -219,6 +219,11 @@ public final class SkillEventListener implements Listener {
     public void onCraftItem(CraftItemEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
         
+        if (!CraftDetection.canCraftSucceed(event)) {
+            player.sendMessage("§c[DEBUG] Craft failed - cannot complete");
+            return;
+        }
+        
         Optional<PlayerSkillData> dataOpt = dataManager.getCachedPlayerData(player.getUniqueId());
         if (dataOpt.isEmpty()) return;
         
@@ -227,6 +232,17 @@ public final class SkillEventListener implements Listener {
         Material type = result.getType();
         
         int craftedAmount = CraftDetection.calculateCraftedAmount(event);
+        CraftDetection.CraftType craftType = CraftDetection.getCraftType(event);
+        
+        if (craftedAmount <= 0) {
+            player.sendMessage("§c[DEBUG] Craft failed - inventory full");
+            return;
+        }
+        
+        player.sendMessage("§e[DEBUG] Crafted: §f" + type.name() + 
+                          " §7x" + craftedAmount + 
+                          " §8(" + craftType + ")");
+        
         String skillId = getCraftingSkillId(type);
         
         if (skillId != null) {
