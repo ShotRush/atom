@@ -20,7 +20,7 @@ public final class CraftDetection {
             return Math.min(maxCraftable, maxFittable);
         }
         
-        if (isDragCraft(event)) {
+        if (isDropCraft(event)) {
             return 1;
         }
         
@@ -39,11 +39,11 @@ public final class CraftDetection {
         return event.getClick() == ClickType.RIGHT;
     }
     
-    public static boolean isDragCraft(CraftItemEvent event) {
-        ClickType click = event.getClick();
-        return click == ClickType.DROP || 
-               click == ClickType.CONTROL_DROP ||
-               click == ClickType.CREATIVE;
+    public static boolean isDropCraft(CraftItemEvent event) {
+    ClickType click = event.getClick();
+    return click == ClickType.DROP ||
+    click == ClickType.CONTROL_DROP ||
+    click == ClickType.CREATIVE;
     }
     
     public static boolean isNumberKeyCraft(CraftItemEvent event) {
@@ -58,8 +58,8 @@ public final class CraftDetection {
         PlayerInventory inv = player.getInventory();
         ItemStack cursor = event.getCursor();
         
-        if (cursor != null && !cursor.getType().isAir()) {
-            if (isLeftClickCraft(event) || isRightClickCraft(event)) {
+        if (isLeftClickCraft(event) || isRightClickCraft(event)) {
+            if (cursor != null && !cursor.getType().isAir()) {
                 if (!cursor.isSimilar(result)) {
                     return false;
                 }
@@ -67,6 +67,8 @@ public final class CraftDetection {
                 if (cursor.getAmount() + result.getAmount() > cursor.getMaxStackSize()) {
                     return false;
                 }
+            } else {
+                return true;
             }
         }
         
@@ -214,20 +216,20 @@ public final class CraftDetection {
     }
     
     public enum CraftType {
-        NORMAL_CLICK,
-        SHIFT_CLICK,
-        RIGHT_CLICK,
-        DRAG,
-        NUMBER_KEY,
-        OTHER
+    NORMAL_CLICK,
+    SHIFT_CLICK,
+    RIGHT_CLICK,
+    DROP,
+    NUMBER_KEY,
+    OTHER
     }
-    
+
     public static CraftType getCraftType(CraftItemEvent event) {
-        if (isShiftClickCraft(event)) return CraftType.SHIFT_CLICK;
-        if (isLeftClickCraft(event)) return CraftType.NORMAL_CLICK;
-        if (isRightClickCraft(event)) return CraftType.RIGHT_CLICK;
-        if (isDragCraft(event)) return CraftType.DRAG;
-        if (isNumberKeyCraft(event)) return CraftType.NUMBER_KEY;
-        return CraftType.OTHER;
+    if (isShiftClickCraft(event)) return CraftType.SHIFT_CLICK;
+    if (isLeftClickCraft(event)) return CraftType.NORMAL_CLICK;
+    if (isRightClickCraft(event)) return CraftType.RIGHT_CLICK;
+    if (isDropCraft(event)) return CraftType.DROP;
+    if (isNumberKeyCraft(event)) return CraftType.NUMBER_KEY;
+    return CraftType.OTHER;
     }
 }
