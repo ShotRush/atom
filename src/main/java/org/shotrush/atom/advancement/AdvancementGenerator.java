@@ -282,22 +282,36 @@ public final class AdvancementGenerator {
     
     private void updateNodeAdvancements(Player player, PlayerSkillData data, SkillNode node) {
         NamespacedKey key = skillAdvancementKeys.get(node.id());
-        if (key == null) return;
+        if (key == null) {
+            System.out.println("[Advancement Debug] No key found for skill: " + node.id());
+            return;
+        }
         
         Advancement advancement = Bukkit.getAdvancement(key);
+        if (advancement == null) {
+            System.out.println("[Advancement Debug] Advancement not registered for key: " + key + " (skill: " + node.id() + ")");
+            return;
+        }
         
-        if (advancement != null) {
-            EffectiveXp effectiveXp = xpEngine.getEffectiveXp(data, node.id());
-            double progress = effectiveXp.progressPercent();
-            
-            var advancementProgress = player.getAdvancementProgress(advancement);
-            boolean wasCompleted = advancementProgress.isDone();
-            
-            if (progress >= 1.0) {
-                advancementProgress.awardCriteria("trigger");
-            } else {
-                advancementProgress.revokeCriteria("trigger");
+        EffectiveXp effectiveXp = xpEngine.getEffectiveXp(data, node.id());
+        double progress = effectiveXp.progressPercent();
+        
+        var advancementProgress = player.getAdvancementProgress(advancement);
+        boolean wasCompleted = advancementProgress.isDone();
+        
+        if (progress >= 1.0) {
+            if (!wasCompleted) {
+                System.out.println("[Advancement Grant] " + player.getName() + " completed '" + node.id() + 
+                    "' (" + effectiveXp.intrinsicXp() + "+" + effectiveXp.honoraryXp() + " XP, " + 
+                    String.format("%.1f%%", progress * 100) + ")");
             }
+            advancementProgress.awardCriteria("trigger");
+        } else {
+            if (wasCompleted) {
+                System.out.println("[Advancement Revoke] " + player.getName() + " lost '" + node.id() + 
+                    "' (now " + String.format("%.1f%%", progress * 100) + ")");
+            }
+            advancementProgress.revokeCriteria("trigger");
         }
         
         for (SkillNode child : node.children().values()) {

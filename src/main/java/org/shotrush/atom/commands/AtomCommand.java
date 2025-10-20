@@ -105,7 +105,21 @@ public final class AtomCommand extends BaseCommand {
     @CommandCompletion("@players @skills @nothing")
     @Description("Set a player's XP in a skill")
     @Syntax("<player> <skill> <amount>")
-    public void onSet(Player sender, Player target, String skillId, long amount) {
+    public void onSet(Player sender, String targetName, String skillId, String amountStr) {
+        Player target = plugin.getServer().getPlayer(targetName);
+        if (target == null) {
+            sender.sendMessage(Component.text("Player not found: " + targetName, NamedTextColor.RED));
+            return;
+        }
+        
+        long amount;
+        try {
+            amount = Long.parseLong(amountStr);
+        } catch (NumberFormatException e) {
+            sender.sendMessage(Component.text("Invalid amount: " + amountStr, NamedTextColor.RED));
+            return;
+        }
+        
         Optional<PlayerSkillData> dataOpt = dataManager.getCachedPlayerData(target.getUniqueId());
         
         if (dataOpt.isEmpty()) {
@@ -134,7 +148,21 @@ public final class AtomCommand extends BaseCommand {
     @CommandCompletion("@players @skills @nothing")
     @Description("Add XP to a player's skill")
     @Syntax("<player> <skill> <amount>")
-    public void onAdd(Player sender, Player target, String skillId, long amount) {
+    public void onAdd(Player sender, String targetName, String skillId, String amountStr) {
+        Player target = plugin.getServer().getPlayer(targetName);
+        if (target == null) {
+            sender.sendMessage(Component.text("Player not found: " + targetName, NamedTextColor.RED));
+            return;
+        }
+        
+        long amount;
+        try {
+            amount = Long.parseLong(amountStr);
+        } catch (NumberFormatException e) {
+            sender.sendMessage(Component.text("Invalid amount: " + amountStr, NamedTextColor.RED));
+            return;
+        }
+        
         Optional<PlayerSkillData> dataOpt = dataManager.getCachedPlayerData(target.getUniqueId());
         
         if (dataOpt.isEmpty()) {

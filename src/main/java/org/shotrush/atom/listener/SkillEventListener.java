@@ -32,19 +32,25 @@ public final class SkillEventListener implements Listener {
     private final XpEngine xpEngine;
     private final FeedbackManager feedbackManager;
     private final MilestoneManager milestoneManager;
+    private final org.shotrush.atom.advancement.AdvancementGenerator advancementGenerator;
+    private final org.shotrush.atom.tree.SkillTreeRegistry treeRegistry;
     
     public SkillEventListener(
         AtomConfig config,
         PlayerDataManager dataManager, 
         XpEngine xpEngine,
         FeedbackManager feedbackManager,
-        MilestoneManager milestoneManager
+        MilestoneManager milestoneManager,
+        org.shotrush.atom.advancement.AdvancementGenerator advancementGenerator,
+        org.shotrush.atom.tree.SkillTreeRegistry treeRegistry
     ) {
         this.config = Objects.requireNonNull(config);
         this.dataManager = Objects.requireNonNull(dataManager);
         this.xpEngine = Objects.requireNonNull(xpEngine);
         this.feedbackManager = Objects.requireNonNull(feedbackManager);
         this.milestoneManager = Objects.requireNonNull(milestoneManager);
+        this.advancementGenerator = Objects.requireNonNull(advancementGenerator);
+        this.treeRegistry = Objects.requireNonNull(treeRegistry);
     }
     
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -60,6 +66,10 @@ public final class SkillEventListener implements Listener {
         
         handleMining(data, type);
         handleCropHarvest(data, block);
+        
+        for (var tree : treeRegistry.getAllTrees()) {
+            advancementGenerator.updatePlayerAdvancements(player, data, tree);
+        }
     }
     
     private void handleMining(PlayerSkillData data, Material type) {
@@ -129,6 +139,10 @@ public final class SkillEventListener implements Listener {
         }
         
         handleCropPlanting(data, type);
+        
+        for (var tree : treeRegistry.getAllTrees()) {
+            advancementGenerator.updatePlayerAdvancements(player, data, tree);
+        }
     }
     
     private void handleCropPlanting(PlayerSkillData data, Material type) {
@@ -154,9 +168,8 @@ public final class SkillEventListener implements Listener {
         if (dataOpt.isEmpty()) return;
         
         PlayerSkillData data = dataOpt.get();
-        EntityType type = event.getEntityType();
         
-        String skillId = switch (type) {
+        String skillId = switch (event.getEntityType()) {
             case ZOMBIE -> "guardsman.combat.kill_zombie";
             case SKELETON -> "guardsman.combat.kill_skeleton";
             case SPIDER -> "guardsman.combat.kill_spider";
@@ -168,6 +181,10 @@ public final class SkillEventListener implements Listener {
             int xpAmount = config.getXpRate("combat.kill");
             xpEngine.awardXp(data, skillId, xpAmount);
         }
+        
+        for (var tree : treeRegistry.getAllTrees()) {
+            advancementGenerator.updatePlayerAdvancements(player, data, tree);
+        }
     }
     
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -178,19 +195,22 @@ public final class SkillEventListener implements Listener {
         if (dataOpt.isEmpty()) return;
         
         PlayerSkillData data = dataOpt.get();
-        EntityType type = event.getEntityType();
         
-        String skillId = switch (type) {
-            case COW -> "farmer.animal_husbandry.breed_cow";
+        String skillId = switch (event.getEntityType()) {
+            case COW -> "farmer.animal_husbandry.breed_cows";
             case SHEEP -> "farmer.animal_husbandry.breed_sheep";
-            case PIG -> "farmer.animal_husbandry.breed_pig";
-            case CHICKEN -> "farmer.animal_husbandry.breed_chicken";
+            case PIG -> "farmer.animal_husbandry.breed_pigs";
+            case CHICKEN -> "farmer.animal_husbandry.breed_chickens";
             default -> null;
         };
         
         if (skillId != null) {
             int xpAmount = config.getXpRate("farming.breed");
             xpEngine.awardXp(data, skillId, xpAmount);
+        }
+        
+        for (var tree : treeRegistry.getAllTrees()) {
+            advancementGenerator.updatePlayerAdvancements(player, data, tree);
         }
     }
     
@@ -207,6 +227,10 @@ public final class SkillEventListener implements Listener {
         
         handleToolCrafting(data, type);
         handleArmorCrafting(data, type);
+        
+        for (var tree : treeRegistry.getAllTrees()) {
+            advancementGenerator.updatePlayerAdvancements(player, data, tree);
+        }
     }
     
     private void handleToolCrafting(PlayerSkillData data, Material type) {
@@ -274,6 +298,8 @@ public final class SkillEventListener implements Listener {
             xpEngine.awardXp(data, "farmer.land_management.use_composter", xpAmount);
         }
         
-        milestoneManager.checkMilestones(player, data);
+        for (var tree : treeRegistry.getAllTrees()) {
+            advancementGenerator.updatePlayerAdvancements(player, data, tree);
+        }
     }
 }

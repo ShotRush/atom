@@ -17,6 +17,9 @@ public final class AtomConfig {
     private final boolean enableFeedback;
     private final boolean enableToolReinforcement;
     private final boolean enableXpTransfer;
+    private final double parentXpMultiplier;
+    private final double parentXpDecay;
+    private final Map<Integer, Integer> depthXpRequirements;
     
     private AtomConfig(Builder builder) {
         this.xpRates = Map.copyOf(builder.xpRates);
@@ -28,6 +31,9 @@ public final class AtomConfig {
         this.enableFeedback = builder.enableFeedback;
         this.enableToolReinforcement = builder.enableToolReinforcement;
         this.enableXpTransfer = builder.enableXpTransfer;
+        this.parentXpMultiplier = builder.parentXpMultiplier;
+        this.parentXpDecay = builder.parentXpDecay;
+        this.depthXpRequirements = Map.copyOf(builder.depthXpRequirements);
     }
     
     public int getXpRate(String actionId) {
@@ -66,6 +72,18 @@ public final class AtomConfig {
         return enableXpTransfer;
     }
     
+    public double parentXpMultiplier() {
+        return parentXpMultiplier;
+    }
+    
+    public double parentXpDecay() {
+        return parentXpDecay;
+    }
+    
+    public int getDepthXpRequirement(int depth) {
+        return depthXpRequirements.getOrDefault(depth, 10000);
+    }
+    
     public static AtomConfig loadFrom(FileConfiguration config) {
         Builder builder = new Builder();
         
@@ -96,6 +114,13 @@ public final class AtomConfig {
         builder.enableFeedback(config.getBoolean("features.feedback", true));
         builder.enableToolReinforcement(config.getBoolean("features.tool-reinforcement", true));
         builder.enableXpTransfer(config.getBoolean("features.xp-transfer", true));
+        builder.parentXpMultiplier(config.getDouble("parent-xp.multiplier", 0.1));
+        builder.parentXpDecay(config.getDouble("parent-xp.decay", 0.5));
+        
+        builder.depthXpRequirement(1, config.getInt("depth-xp-requirements.depth-1", 1000));
+        builder.depthXpRequirement(2, config.getInt("depth-xp-requirements.depth-2", 5000));
+        builder.depthXpRequirement(3, config.getInt("depth-xp-requirements.depth-3", 10000));
+        builder.depthXpRequirement(4, config.getInt("depth-xp-requirements.depth-4", 15000));
         
         return builder.build();
     }
@@ -110,6 +135,9 @@ public final class AtomConfig {
         private boolean enableFeedback = true;
         private boolean enableToolReinforcement = true;
         private boolean enableXpTransfer = true;
+        private double parentXpMultiplier = 0.1;
+        private double parentXpDecay = 0.5;
+        private final Map<Integer, Integer> depthXpRequirements = new HashMap<>();
         
         public Builder xpRate(String actionId, int rate) {
             this.xpRates.put(actionId, rate);
@@ -153,6 +181,21 @@ public final class AtomConfig {
         
         public Builder enableXpTransfer(boolean enable) {
             this.enableXpTransfer = enable;
+            return this;
+        }
+        
+        public Builder parentXpMultiplier(double multiplier) {
+            this.parentXpMultiplier = multiplier;
+            return this;
+        }
+        
+        public Builder parentXpDecay(double decay) {
+            this.parentXpDecay = decay;
+            return this;
+        }
+        
+        public Builder depthXpRequirement(int depth, int xp) {
+            this.depthXpRequirements.put(depth, xp);
             return this;
         }
         

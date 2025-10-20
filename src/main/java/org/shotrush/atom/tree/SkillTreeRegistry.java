@@ -61,13 +61,47 @@ public final class SkillTreeRegistry {
                 return node;
             }
         }
+        
+        if (skillId.startsWith("dynamic_")) {
+            return generateDynamicNode(skillId);
+        }
+        
         return Optional.empty();
+    }
+    
+    private Optional<SkillNode> generateDynamicNode(String skillId) {
+        String[] parts = skillId.split("\\.");
+        if (parts.length < 4) return Optional.empty();
+        
+        String parentId = String.join(".", java.util.Arrays.copyOf(parts, parts.length - 1));
+        Optional<SkillNode> parentOpt = findNode(parentId);
+        
+        if (parentOpt.isEmpty() || parentOpt.get().depth() < 2) {
+            return Optional.empty();
+        }
+        
+        String displayName = parts[parts.length - 1].replace("_", " ");
+        displayName = displayName.substring(0, 1).toUpperCase() + displayName.substring(1);
+        
+        SkillNode dynamicNode = org.shotrush.atom.model.SkillNode.builder()
+            .id(skillId)
+            .displayName(displayName)
+            .maxXp(5000)
+            .type(org.shotrush.atom.model.SkillNode.NodeType.LEAF)
+            .parent(parentOpt.get())
+            .build();
+        
+        return Optional.of(dynamicNode);
     }
     
     public List<SkillNode> findAllNodes(String skillId) {
         List<SkillNode> nodes = new ArrayList<>();
         for (SkillTree tree : trees.values()) {
             tree.getNode(skillId).ifPresent(nodes::add);
+        }
+        if (skillId.startsWith("dynamic_")) {
+            Optional<SkillNode> dynamicNode = generateDynamicNode(skillId);
+            dynamicNode.ifPresent(nodes::add);
         }
         return nodes;
     }

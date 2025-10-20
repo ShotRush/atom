@@ -13,11 +13,14 @@ public final class XpEngine {
     private final SkillTreeRegistry treeRegistry;
     private final XpCalculator calculator;
     private final org.shotrush.atom.tree.MultiTreeAggregator aggregator;
+    private final org.shotrush.atom.config.AtomConfig config;
     
-    public XpEngine(SkillTreeRegistry treeRegistry, org.shotrush.atom.tree.MultiTreeAggregator aggregator) {
+    public XpEngine(SkillTreeRegistry treeRegistry, org.shotrush.atom.tree.MultiTreeAggregator aggregator, 
+                    org.shotrush.atom.config.AtomConfig config) {
         this.treeRegistry = Objects.requireNonNull(treeRegistry, "treeRegistry cannot be null");
         this.aggregator = aggregator;
         this.calculator = new XpCalculator();
+        this.config = Objects.requireNonNull(config, "config cannot be null");
     }
     
     public void awardXp(PlayerSkillData playerData, String skillId, long amount) {
@@ -34,14 +37,50 @@ public final class XpEngine {
         }
         
         SkillNode node = nodeOpt.get();
-        long currentXp = playerData.getIntrinsicXp(skillId);
-        long newXp = Math.min(currentXp + amount, node.maxXp());
         
-        playerData.setIntrinsicXp(skillId, newXp);
+        propagateXpTopDown(playerData, node, amount);
+        
         calculator.invalidateCache(playerData.playerId());
         
         if (aggregator != null) {
             aggregator.updatePlayerWeights(playerData.playerId(), playerData);
+        }
+    }
+    
+    private void propagateXpTopDown(PlayerSkillData playerData, SkillNode node, long amount) {
+        List<SkillNode> pathToClass = new ArrayList<>();
+        SkillNode current = node;
+        
+        while (current != null) {
+            pathToClass.add(current);
+            current = current.parent().orElse(null);
+            
+            if (current != null && current.depth() == 0) {
+                break;
+            }
+        }
+        
+        Collections.reverse(pathToClass);
+        
+        double multiplier = 1.0;
+        for (int i = 0; i < pathToClass.size(); i++) {
+            SkillNode pathNode = pathToClass.get(i);
+            long nodeXp = playerData.getIntrinsicXp(pathNode.id());
+            long xpToAdd = (long) (amount * multiplier);
+            
+            if (nodeXp >= pathNode.maxXp()) {
+                System.out.println("[XP Flow] " + pathNode.id() + " is maxed, passing through (depth: " + pathNode.depth() + ")");
+            } else {
+                long newXp = Math.min(nodeXp + xpToAdd, pathNode.maxXp());
+                playerData.setIntrinsicXp(pathNode.id(), newXp);
+                
+                System.out.println("[XP Flow] " + pathNode.id() + " +=" + xpToAdd + " XP (depth: " + pathNode.depth() + 
+                    ", multiplier: " + String.format("%.2f", multiplier) + ")");
+            }
+            
+            if (i < pathToClass.size() - 1) {
+                multiplier *= config.parentXpDecay();
+            }
         }
     }
     
@@ -63,6 +102,10 @@ public final class XpEngine {
         
         playerData.setIntrinsicXp(skillId, cappedXp);
         calculator.invalidateCache(playerData.playerId());
+        
+        if (aggregator != null) {
+            aggregator.updatePlayerWeights(playerData.playerId(), playerData);
+        }
     }
     
     public EffectiveXp getEffectiveXp(PlayerSkillData playerData, String skillId) {

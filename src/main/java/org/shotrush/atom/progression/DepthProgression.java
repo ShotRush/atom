@@ -138,6 +138,15 @@ public final class DepthProgression {
         SkillNode node = allNodes.get(skillId);
         if (node == null) return extractTreeName(skillId);
         
+        if (node.depth() >= 3 && xp > node.maxXp() * 2.0) {
+            String hyperSpec = generateHyperSpecialization(node, data, allNodes);
+            if (hyperSpec != null) {
+                System.out.println("[ML] Hyperspecialization detected: '" + hyperSpec + "' for '" + skillId + 
+                    "' (xp: " + xp + ", depth: " + node.depth() + ")");
+                return hyperSpec;
+            }
+        }
+        
         Map<String, Double> affinities = calculateAffinities(node, data, allNodes);
         
         String bestCluster = null;
@@ -156,6 +165,48 @@ public final class DepthProgression {
         }
         
         return bestCluster != null ? bestCluster : extractTreeName(skillId);
+    }
+    
+    private static String generateHyperSpecialization(SkillNode node, PlayerSkillData data, Map<String, SkillNode> allNodes) {
+        if (node.depth() < 3) return null;
+        
+        long nodeXp = data.getAllIntrinsicXp().getOrDefault(node.id(), 0L);
+        Map<String, Long> relatedSkills = new HashMap<>();
+        
+        for (Map.Entry<String, Long> entry : data.getAllIntrinsicXp().entrySet()) {
+            SkillNode other = allNodes.get(entry.getKey());
+            if (other == null || other.depth() < 2) continue;
+            
+            if (entry.getValue() > other.maxXp() * 1.5 && 
+                calculateSimilarity(node, other, data) > 0.7) {
+                relatedSkills.put(entry.getKey(), entry.getValue());
+            }
+        }
+        
+        if (relatedSkills.size() >= 2) {
+            String specType = inferSpecializationType(node, relatedSkills, allNodes);
+            return "dynamic_" + node.id() + "." + specType;
+        }
+        
+        return null;
+    }
+    
+    private static String inferSpecializationType(SkillNode node, Map<String, Long> relatedSkills, Map<String, SkillNode> allNodes) {
+        String nodeId = node.id().toLowerCase();
+        
+        if (nodeId.contains("diamond") || nodeId.contains("iron") || nodeId.contains("gold")) {
+            return "master_tier";
+        } else if (nodeId.contains("mining") || nodeId.contains("ore")) {
+            return "efficiency_expert";
+        } else if (nodeId.contains("combat") || nodeId.contains("kill")) {
+            return "combat_mastery";
+        } else if (nodeId.contains("craft") || nodeId.contains("tool")) {
+            return "crafting_virtuoso";
+        } else if (nodeId.contains("farm") || nodeId.contains("crop")) {
+            return "agricultural_mastery";
+        }
+        
+        return "advanced_technique";
     }
     
     private static Map<String, Double> calculateAffinities(SkillNode node, PlayerSkillData data, Map<String, SkillNode> allNodes) {

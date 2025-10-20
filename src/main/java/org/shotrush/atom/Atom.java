@@ -107,7 +107,7 @@ public final class Atom extends JavaPlugin {
     private void initializeTreeRegistry() {
         treeRegistry = new SkillTreeRegistry();
 
-        List<TreeDefinition> defaultTrees = DefaultTrees.createDefaultTrees();
+        List<TreeDefinition> defaultTrees = DefaultTrees.createDefaultTrees(config);
 
         for (TreeDefinition treeDef : defaultTrees) {
             SkillTree tree = TreeBuilder.buildFromDefinition(treeDef);
@@ -120,8 +120,8 @@ public final class Atom extends JavaPlugin {
     private void initializeManagers() {
         dataManager = new PlayerDataManager(storage);
         multiTreeAggregator = new org.shotrush.atom.tree.MultiTreeAggregator(treeRegistry);
-        xpEngine = new XpEngine(treeRegistry, multiTreeAggregator);
-        effectManager = new EffectManager(this, config, xpEngine, treeRegistry);
+        xpEngine = new XpEngine(treeRegistry, multiTreeAggregator, config);
+        effectManager = new EffectManager(this, config, xpEngine, treeRegistry, dataManager);
         feedbackManager = new FeedbackManager(config);
         milestoneManager = new MilestoneManager(xpEngine, feedbackManager);
         advancementGenerator = new AdvancementGenerator(this, xpEngine);
@@ -150,7 +150,7 @@ public final class Atom extends JavaPlugin {
         );
 
         getServer().getPluginManager().registerEvents(
-            new SkillEventListener(config, dataManager, xpEngine, feedbackManager, milestoneManager),
+            new SkillEventListener(config, dataManager, xpEngine, feedbackManager, milestoneManager, advancementGenerator, treeRegistry),
             this
         );
         

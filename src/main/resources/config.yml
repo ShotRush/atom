@@ -7,6 +7,16 @@ features:
   tool-reinforcement: true
   xp-transfer: true
 
+parent-xp:
+  multiplier: 1.0  # Root gets 100% of XP first
+  decay: 0.5       # Each child level gets 50% less (child gets 50%, grandchild gets 25%)
+
+depth-xp-requirements:
+  depth-1: 1000    # Root classes (farmer, miner, etc.)
+  depth-2: 5000    # Categories (crop_farming, ore_mining, etc.)
+  depth-3: 10000   # Specializations (wheat, diamond, etc.)
+  depth-4: 15000   # Mastery (plant, harvest, strip_mining, etc.)
+
 xp-rates:
   mining.stone: 10
   mining.ore: 10

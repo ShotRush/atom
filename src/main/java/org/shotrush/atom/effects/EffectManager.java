@@ -3,6 +3,7 @@ package org.shotrush.atom.effects;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.shotrush.atom.config.AtomConfig;
+import org.shotrush.atom.manager.PlayerDataManager;
 import org.shotrush.atom.engine.XpEngine;
 import org.shotrush.atom.model.PlayerSkillData;
 import org.shotrush.atom.model.SkillNode;
@@ -29,14 +30,15 @@ public final class EffectManager {
     private final RecipeManager recipeManager;
     private final Map<UUID, SpecializationCache> specializationCache;
     
-    public EffectManager(Plugin plugin, AtomConfig config, XpEngine xpEngine, SkillTreeRegistry treeRegistry) {
+    public EffectManager(Plugin plugin, AtomConfig config, XpEngine xpEngine, SkillTreeRegistry treeRegistry, 
+                         PlayerDataManager dataManager) {
         this.plugin = plugin;
         this.config = config;
         this.xpEngine = xpEngine;
         this.treeRegistry = treeRegistry;
         this.attributeSystem = new AttributeModifierSystem(plugin);
         this.unlockSystem = new UnlockSystem();
-        this.recipeManager = new RecipeManager(unlockSystem);
+        this.recipeManager = new RecipeManager(unlockSystem, dataManager, treeRegistry);
         this.specializationCache = new ConcurrentHashMap<>();
     }
     

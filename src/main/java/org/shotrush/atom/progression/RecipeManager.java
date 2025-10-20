@@ -7,7 +7,10 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.PrepareItemCraftEvent;
 import org.bukkit.event.player.PlayerRecipeDiscoverEvent;
+import org.bukkit.inventory.CraftingInventory;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.Recipe;
 import org.shotrush.atom.model.PlayerSkillData;
 import org.shotrush.atom.model.SkillNode;
@@ -19,38 +22,93 @@ public final class RecipeManager implements Listener {
     
     private final UnlockSystem unlockSystem;
     private final Map<UUID, Set<NamespacedKey>> playerDiscoveredRecipes;
+    private final org.shotrush.atom.manager.PlayerDataManager dataManager;
+    private final org.shotrush.atom.tree.SkillTreeRegistry treeRegistry;
     
-    public RecipeManager(UnlockSystem unlockSystem) {
+    public RecipeManager(UnlockSystem unlockSystem, org.shotrush.atom.manager.PlayerDataManager dataManager, 
+                         org.shotrush.atom.tree.SkillTreeRegistry treeRegistry) {
         this.unlockSystem = unlockSystem;
         this.playerDiscoveredRecipes = new ConcurrentHashMap<>();
+        this.dataManager = dataManager;
+        this.treeRegistry = treeRegistry;
     }
     
 
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onPrepareItemCraft(PrepareItemCraftEvent event) {
+        Recipe recipe = event.getRecipe();
+        if (recipe == null) return;
+        
+        if (!(event.getView().getPlayer() instanceof Player player)) return;
+        
+        Optional<PlayerSkillData> dataOpt = dataManager.getCachedPlayerData(player.getUniqueId());
+        if (dataOpt.isEmpty()) {
+            event.getInventory().setResult(null);System.out.println("[Recipe Block] No player data for " + player.getName());
+            return;
+        }
+        
+        Map<String, SkillNode> allNodes = buildNodeIndex();
+        PlayerSkillData data = dataOpt.get();
+        
+        boolean canCraft = checkRecipeUnlock(player, data, allNodes, recipe);
+        
+        if (!canCraft) {
+            String itemName = recipe.getResult().getType().name();
+            System.out.println("[Recipe Block] Blocked " + itemName + " for " + player.getName() + 
+                " (insufficient skill progression)");
+            
+            event.getInventory().setResult(null);
+            player.sendActionBar(net.kyori.adventure.text.Component.text(
+                "§cInsufficient skill to craft this item",
+                net.kyori.adventure.text.format.NamedTextColor.RED
+            ));
+        } else {
+            String itemName = recipe.getResult().getType().name();
+            System.out.println("[Recipe Allow] " + player.getName() + " can craft " + itemName);
+        }
+    }
+    
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onRecipeDiscover(PlayerRecipeDiscoverEvent event) {
         Player player = event.getPlayer();
         NamespacedKey recipeKey = event.getRecipe();
         
-        
-        
         Recipe recipe = Bukkit.getRecipe(recipeKey);
         if (recipe == null) return;
         
+        Optional<PlayerSkillData> dataOpt = dataManager.getCachedPlayerData(player.getUniqueId());
+        if (dataOpt.isEmpty()) {
+            event.setCancelled(true);
+            System.out.println("[Recipe Discovery Block] No player data for " + player.getName());
+            return;
+        }
         
-        
-        boolean hasUnlock = checkRecipeUnlock(player, recipe);
+        Map<String, SkillNode> allNodes = buildNodeIndex();
+        boolean hasUnlock = checkRecipeUnlock(player, dataOpt.get(), allNodes, recipe);
         
         if (!hasUnlock) {
+            String itemName = recipe.getResult().getType().name();
+            System.out.println("[Recipe Discovery Block] Blocked " + itemName + " discovery for " + 
+                player.getName() + " (insufficient skill)");
             
             event.setCancelled(true);
-            
-            
-            player.sendMessage("§cYou need to progress further in your skills to unlock this recipe!");
         } else {
+            String itemName = recipe.getResult().getType().name();
+            System.out.println("[Recipe Discovery Allow] " + player.getName() + " discovered " + itemName);
             
             playerDiscoveredRecipes.computeIfAbsent(player.getUniqueId(), k -> ConcurrentHashMap.newKeySet())
                 .add(recipeKey);
         }
+    }
+    
+    private Map<String, SkillNode> buildNodeIndex() {
+        Map<String, SkillNode> index = new HashMap<>();
+        for (var tree : treeRegistry.getAllTrees()) {
+            for (String skillId : tree.getAllSkillIds()) {
+                tree.getNode(skillId).ifPresent(node -> index.put(skillId, node));
+            }
+        }
+        return index;
     }
     
     
@@ -108,12 +166,19 @@ public final class RecipeManager implements Listener {
     private boolean checkRecipeUnlock(Player player, PlayerSkillData playerData, Map<String, SkillNode> allNodes, Recipe recipe) {
         Material result = recipe.getResult().getType();
         
+        if (isBasicRecipe(result)) {
+            return true;
+        }
+        
         double totalSkillScore = 0.0;
         int relevantSkills = 0;
+        int totalSkillsWithXp = 0;
         
         for (Map.Entry<String, Long> entry : playerData.getAllIntrinsicXp().entrySet()) {
             SkillNode node = allNodes.get(entry.getKey());
             if (node == null) continue;
+            
+            if (entry.getValue() > 0) totalSkillsWithXp++;
             
             double ratio = entry.getValue() / (double) node.maxXp();
             
@@ -127,6 +192,10 @@ public final class RecipeManager implements Listener {
             }
         }
         
+        if (totalSkillsWithXp == 0) {
+            return false;
+        }
+        
         if (relevantSkills >= 2 && totalSkillScore > 1.5) {
             return true;
         }
@@ -134,26 +203,37 @@ public final class RecipeManager implements Listener {
         return unlockSystem.canCraft(player, result, playerData, allNodes);
     }
     
+    private boolean isBasicRecipe(Material material) {
+        String name = material.name().toLowerCase();
+        
+        if (name.contains("planks") || name.equals("stick") || name.equals("crafting_table")) {
+            return true;
+        }
+        
+        if (name.startsWith("wooden_") && (name.contains("pickaxe") || name.contains("axe") || 
+            name.contains("shovel") || name.contains("hoe") || name.contains("sword"))) {
+            return true;
+        }
+
+        return name.equals("torch") || name.equals("chest") || name.equals("furnace");
+    }
     
-    public void grantBasicRecipes(Player player) {
+    
+    public void initializePlayerRecipes(Player player, PlayerSkillData playerData) {
+        Map<String, SkillNode> allNodes = buildNodeIndex();
         
-        List<String> basicRecipes = Arrays.asList(
-            "crafting_table",
-            "stick",
-            "wooden_pickaxe",
-            "wooden_axe",
-            "wooden_shovel",
-            "wooden_hoe",
-            "wooden_sword",
-            "torch"
-        );
-        
-        for (String recipeName : basicRecipes) {
-            NamespacedKey key = NamespacedKey.minecraft(recipeName);
-            if (Bukkit.getRecipe(key) != null) {
-                player.discoverRecipe(key);
+        Iterator<Recipe> recipeIterator = Bukkit.recipeIterator();
+        while (recipeIterator.hasNext()) {
+            Recipe recipe = recipeIterator.next();
+            
+            if (isBasicRecipe(recipe.getResult().getType())) {
+                player.discoverRecipe(recipe.getResult().getType().getKey());
+                System.out.println("[Recipe Init] Granted basic recipe " + recipe.getResult().getType().name() + 
+                    " to " + player.getName());
             }
         }
+        
+        updatePlayerRecipes(player, playerData, allNodes);
     }
     
     
