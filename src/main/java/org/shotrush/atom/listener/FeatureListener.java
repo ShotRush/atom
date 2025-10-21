@@ -13,7 +13,6 @@ import org.bukkit.inventory.ItemStack;
 import org.shotrush.atom.config.AtomConfig;
 import org.shotrush.atom.detection.CraftDetection;
 import org.shotrush.atom.effects.EffectManager;
-import org.shotrush.atom.effects.FeedbackManager;
 import org.shotrush.atom.engine.XpEngine;
 import org.shotrush.atom.features.ToolReinforcement;
 import org.shotrush.atom.features.XpTransfer;
@@ -30,7 +29,6 @@ public final class FeatureListener implements Listener {
     private final PlayerDataManager dataManager;
     private final XpEngine xpEngine;
     private final EffectManager effectManager;
-    private final FeedbackManager feedbackManager;
     private final ToolReinforcement toolReinforcement;
     private final XpTransfer xpTransfer;
     private final Random random;
@@ -40,7 +38,6 @@ public final class FeatureListener implements Listener {
         PlayerDataManager dataManager,
         XpEngine xpEngine,
         EffectManager effectManager,
-        FeedbackManager feedbackManager,
         ToolReinforcement toolReinforcement,
         XpTransfer xpTransfer
     ) {
@@ -48,7 +45,6 @@ public final class FeatureListener implements Listener {
         this.dataManager = Objects.requireNonNull(dataManager);
         this.xpEngine = Objects.requireNonNull(xpEngine);
         this.effectManager = Objects.requireNonNull(effectManager);
-        this.feedbackManager = Objects.requireNonNull(feedbackManager);
         this.toolReinforcement = Objects.requireNonNull(toolReinforcement);
         this.xpTransfer = Objects.requireNonNull(xpTransfer);
         this.random = new Random();
@@ -127,7 +123,7 @@ public final class FeatureListener implements Listener {
             
             if (skillId != null && storedXp > 0) {
                 xpEngine.awardXp(data, skillId, storedXp);
-                feedbackManager.sendXpGain(player, skillId, storedXp);
+                effectManager.sendXpGain(player, skillId, storedXp);
                 
                 item.setAmount(item.getAmount() - 1);
                 event.setCancelled(true);

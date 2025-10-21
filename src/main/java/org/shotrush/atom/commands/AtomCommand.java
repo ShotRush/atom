@@ -12,6 +12,7 @@ import org.shotrush.atom.model.EffectiveXp;
 import org.shotrush.atom.model.PlayerSkillData;
 import org.shotrush.atom.tree.SkillTreeRegistry;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -236,6 +237,140 @@ public final class AtomCommand extends BaseCommand {
             });
         
         player.sendMessage(Component.text("Cache size: " + xpEngine.calculator().cacheSize(), NamedTextColor.GRAY));
+    }
+    
+    @Subcommand("admin ml regenerate")
+    @CommandPermission("atom.admin.ml")
+    @Description("Regenerate skill tree branches using ML clustering")
+    public void onMlRegenerate(Player sender) {
+        if (plugin.getDynamicTreeManager() == null) {
+            sender.sendMessage(Component.text("✗ Dynamic tree generation is not enabled!", NamedTextColor.RED));
+            sender.sendMessage(Component.text("  Enable it in config.yml: features.dynamic-tree-generation: true", NamedTextColor.GRAY));
+            return;
+        }
+        
+        sender.sendMessage(Component.text("⚙ Regenerating skill tree branches using ML clustering...", NamedTextColor.YELLOW));
+        
+        plugin.getServer().getGlobalRegionScheduler().run(plugin, task -> {
+            plugin.getDynamicTreeManager().regenerateAllBranches();
+            
+            sender.sendMessage(Component.text("✓ Tree regeneration complete!", NamedTextColor.GREEN));
+            sender.sendMessage(Component.text("  Note: Server restart required to apply changes to advancements", NamedTextColor.GRAY));
+        });
+    }
+    
+    @Subcommand("admin ml generate")
+    @CommandPermission("atom.admin.ml")
+    @CommandCompletion("farmer|guardsman|miner|healer|blacksmith|builder|librarian")
+    @Description("Generate branches for a specific skill cluster")
+    @Syntax("<cluster>")
+    public void onMlGenerate(Player sender, String clusterId) {
+        if (plugin.getDynamicTreeManager() == null) {
+            sender.sendMessage(Component.text("✗ Dynamic tree generation is not enabled!", NamedTextColor.RED));
+            return;
+        }
+        
+        String[] validClusters = {"farmer", "guardsman", "miner", "healer", "blacksmith", "builder", "librarian"};
+        boolean isValid = false;
+        for (String valid : validClusters) {
+            if (valid.equalsIgnoreCase(clusterId)) {
+                isValid = true;
+                clusterId = valid;
+                break;
+            }
+        }
+        
+        if (!isValid) {
+            sender.sendMessage(Component.text("✗ Invalid cluster. Valid options: farmer, guardsman, miner, healer, blacksmith, builder, librarian", NamedTextColor.RED));
+            return;
+        }
+        
+        String finalClusterId = clusterId;
+        sender.sendMessage(Component.text("⚙ Generating branches for " + clusterId + "...", NamedTextColor.YELLOW));
+        
+        plugin.getServer().getGlobalRegionScheduler().run(plugin, task -> {
+            plugin.getDynamicTreeManager().generateBranchesForCluster(finalClusterId);
+            sender.sendMessage(Component.text("✓ Generated branches for " + finalClusterId, NamedTextColor.GREEN));
+        });
+    }
+    
+    @Subcommand("admin ml restructure")
+    @CommandPermission("atom.admin.ml")
+    @Description("Restructure trees based on player usage patterns")
+    public void onMlRestructure(Player sender) {
+        if (plugin.getDynamicTreeManager() == null) {
+            sender.sendMessage(Component.text("✗ Dynamic tree generation is not enabled!", NamedTextColor.RED));
+            return;
+        }
+        
+        sender.sendMessage(Component.text("⚙ Analyzing player usage patterns and restructuring trees...", NamedTextColor.YELLOW));
+        
+        plugin.getServer().getGlobalRegionScheduler().run(plugin, task -> {
+            plugin.getDynamicTreeManager().autoRestructureIfNeeded();
+            sender.sendMessage(Component.text("✓ Tree restructure analysis complete!", NamedTextColor.GREEN));
+            sender.sendMessage(Component.text("  Check console for details on which trees were restructured", NamedTextColor.GRAY));
+        });
+    }
+    
+    @Subcommand("links")
+    @CommandPermission("atom.links")
+    @Description("View your skill links and potential combinations")
+    public void onLinks(Player player) {
+        Optional<PlayerSkillData> dataOpt = dataManager.getCachedPlayerData(player.getUniqueId());
+        
+        if (dataOpt.isEmpty()) {
+            player.sendMessage(Component.text("No data loaded", NamedTextColor.RED));
+            return;
+        }
+        
+        PlayerSkillData data = dataOpt.get();
+        
+        
+        Map<String, Double> effectiveXpMap = new HashMap<>();
+        for (String skillId : data.getAllIntrinsicXp().keySet()) {
+            var effectiveXp = xpEngine.getEffectiveXp(data, skillId);
+            effectiveXpMap.put(skillId, effectiveXp.progressPercent());
+        }
+        
+        
+        var currentLinks = plugin.getSkillLinkingSystem().getPlayerLinks(player.getUniqueId());
+        
+        
+        var potentialLinks = plugin.getSkillLinkingSystem().discoverPotentialLinks(data, effectiveXpMap);
+        
+        player.sendMessage(Component.text("═══════════════════════════", NamedTextColor.GOLD));
+        player.sendMessage(Component.text("Skill Links", NamedTextColor.YELLOW));
+        player.sendMessage(Component.text("═══════════════════════════", NamedTextColor.GOLD));
+        
+        if (currentLinks.isEmpty()) {
+            player.sendMessage(Component.text("  No active links (max 4)", NamedTextColor.GRAY));
+        } else {
+            player.sendMessage(Component.text("  Active Links (" + currentLinks.size() + "/4):", NamedTextColor.GREEN));
+            for (var link : currentLinks) {
+                player.sendMessage(Component.text("    ✦ " + link.name(), NamedTextColor.AQUA)
+                    .append(Component.text(" (" + link.linkedSkills().size() + " skills)", NamedTextColor.GRAY)));
+            }
+        }
+        
+        player.sendMessage(Component.text(""));
+        
+        if (potentialLinks.isEmpty()) {
+            player.sendMessage(Component.text("  No potential links available", NamedTextColor.GRAY));
+            player.sendMessage(Component.text("  Master more leaf skills (95%+) to unlock links!", NamedTextColor.YELLOW));
+        } else {
+            player.sendMessage(Component.text("  Potential Links:", NamedTextColor.GREEN));
+            int shown = Math.min(5, potentialLinks.size());
+            for (int i = 0; i < shown; i++) {
+                var link = potentialLinks.get(i);
+                player.sendMessage(Component.text("    " + (i+1) + ". " + link.name(), NamedTextColor.AQUA)
+                    .append(Component.text(" - " + String.format("%.0f%%", link.compatibility() * 100) + " match", NamedTextColor.GRAY)));
+            }
+            if (potentialLinks.size() > 5) {
+                player.sendMessage(Component.text("    ... and " + (potentialLinks.size() - 5) + " more", NamedTextColor.GRAY));
+            }
+        }
+        
+        player.sendMessage(Component.text("═══════════════════════════", NamedTextColor.GOLD));
     }
     
     private String capitalize(String str) {

@@ -20,6 +20,8 @@ public final class AtomConfig {
     private final double parentXpMultiplier;
     private final double parentXpDecay;
     private final Map<Integer, Integer> depthXpRequirements;
+    private final double advancementGrantThreshold;
+    private final boolean enableDynamicTreeGeneration;
     
     private AtomConfig(Builder builder) {
         this.xpRates = Map.copyOf(builder.xpRates);
@@ -34,6 +36,8 @@ public final class AtomConfig {
         this.parentXpMultiplier = builder.parentXpMultiplier;
         this.parentXpDecay = builder.parentXpDecay;
         this.depthXpRequirements = Map.copyOf(builder.depthXpRequirements);
+        this.advancementGrantThreshold = builder.advancementGrantThreshold;
+        this.enableDynamicTreeGeneration = builder.enableDynamicTreeGeneration;
     }
     
     public int getXpRate(String actionId) {
@@ -84,6 +88,14 @@ public final class AtomConfig {
         return depthXpRequirements.getOrDefault(depth, 10000);
     }
     
+    public double advancementGrantThreshold() {
+        return advancementGrantThreshold;
+    }
+    
+    public boolean enableDynamicTreeGeneration() {
+        return enableDynamicTreeGeneration;
+    }
+    
     public static AtomConfig loadFrom(FileConfiguration config) {
         Builder builder = new Builder();
         
@@ -122,6 +134,9 @@ public final class AtomConfig {
         builder.depthXpRequirement(3, config.getInt("depth-xp-requirements.depth-3", 10000));
         builder.depthXpRequirement(4, config.getInt("depth-xp-requirements.depth-4", 15000));
         
+        builder.advancementGrantThreshold(config.getDouble("advancement-grant-threshold", 0.01));
+        builder.enableDynamicTreeGeneration(config.getBoolean("features.dynamic-tree-generation", false));
+        
         return builder.build();
     }
     
@@ -138,6 +153,8 @@ public final class AtomConfig {
         private double parentXpMultiplier = 0.1;
         private double parentXpDecay = 0.5;
         private final Map<Integer, Integer> depthXpRequirements = new HashMap<>();
+        private double advancementGrantThreshold = 0.01;
+        private boolean enableDynamicTreeGeneration = false;
         
         public Builder xpRate(String actionId, int rate) {
             this.xpRates.put(actionId, rate);
@@ -196,6 +213,16 @@ public final class AtomConfig {
         
         public Builder depthXpRequirement(int depth, int xp) {
             this.depthXpRequirements.put(depth, xp);
+            return this;
+        }
+        
+        public Builder advancementGrantThreshold(double threshold) {
+            this.advancementGrantThreshold = threshold;
+            return this;
+        }
+        
+        public Builder enableDynamicTreeGeneration(boolean enable) {
+            this.enableDynamicTreeGeneration = enable;
             return this;
         }
         

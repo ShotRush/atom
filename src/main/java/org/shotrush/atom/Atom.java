@@ -9,7 +9,6 @@ import org.shotrush.atom.config.DefaultTrees;
 import org.shotrush.atom.config.TreeBuilder;
 import org.shotrush.atom.config.TreeDefinition;
 import org.shotrush.atom.effects.EffectManager;
-import org.shotrush.atom.effects.FeedbackManager;
 import org.shotrush.atom.engine.XpEngine;
 import org.shotrush.atom.features.ToolReinforcement;
 import org.shotrush.atom.features.XpTransfer;
@@ -30,16 +29,18 @@ public final class Atom extends JavaPlugin {
 
     private AtomConfig config;
     private StorageProvider storage;
+    private org.shotrush.atom.storage.TreeStorage treeStorage;
     private PlayerDataManager dataManager;
     private SkillTreeRegistry treeRegistry;
     private XpEngine xpEngine;
     private EffectManager effectManager;
-    private FeedbackManager feedbackManager;
     private MilestoneManager milestoneManager;
     private AdvancementGenerator advancementGenerator;
     private ToolReinforcement toolReinforcement;
     private XpTransfer xpTransfer;
     private org.shotrush.atom.tree.MultiTreeAggregator multiTreeAggregator;
+    private org.shotrush.atom.ml.DynamicTreeManager dynamicTreeManager;
+    private org.shotrush.atom.ml.SkillLinkingSystem skillLinkingSystem;
     private PaperCommandManager commandManager;
     
     @Override
@@ -102,6 +103,9 @@ public final class Atom extends JavaPlugin {
         storage = new SQLiteStorage(databasePath);
         storage.initialize().join();
         getLogger().info("Database initialized at: " + databasePath);
+        
+        treeStorage = new org.shotrush.atom.storage.TreeStorage(this);
+        getLogger().info("Tree storage initialized");
     }
 
     private void initializeTreeRegistry() {
@@ -122,9 +126,15 @@ public final class Atom extends JavaPlugin {
         multiTreeAggregator = new org.shotrush.atom.tree.MultiTreeAggregator(treeRegistry);
         xpEngine = new XpEngine(treeRegistry, multiTreeAggregator, config);
         effectManager = new EffectManager(this, config, xpEngine, treeRegistry, dataManager);
-        feedbackManager = new FeedbackManager(config);
-        milestoneManager = new MilestoneManager(xpEngine, feedbackManager);
-        advancementGenerator = new AdvancementGenerator(this, xpEngine);
+        milestoneManager = new MilestoneManager(xpEngine, effectManager);
+        advancementGenerator = new AdvancementGenerator(this, xpEngine, config);
+        
+        skillLinkingSystem = new org.shotrush.atom.ml.SkillLinkingSystem(this, treeRegistry, advancementGenerator);
+        
+        if (config.enableDynamicTreeGeneration()) {
+            dynamicTreeManager = new org.shotrush.atom.ml.DynamicTreeManager(this, treeRegistry, dataManager, treeStorage);
+            getLogger().info("Dynamic tree generation enabled - trees will persist across restarts");
+        }
         
         for (SkillTree tree : treeRegistry.getAllTrees()) {
             advancementGenerator.generateAdvancementsForTree(tree);
@@ -150,12 +160,12 @@ public final class Atom extends JavaPlugin {
         );
 
         getServer().getPluginManager().registerEvents(
-            new SkillEventListener(config, dataManager, xpEngine, feedbackManager, milestoneManager, advancementGenerator, treeRegistry),
+            new SkillEventListener(config, dataManager, xpEngine, effectManager, milestoneManager, advancementGenerator, treeRegistry),
             this
         );
         
         getServer().getPluginManager().registerEvents(
-            new FeatureListener(config, dataManager, xpEngine, effectManager, feedbackManager, toolReinforcement, xpTransfer),
+            new FeatureListener(config, dataManager, xpEngine, effectManager, toolReinforcement, xpTransfer),
             this
         );
         
@@ -197,6 +207,17 @@ public final class Atom extends JavaPlugin {
                 });
             });
         }, 100L, 100L);
+        
+        if (config.enableDynamicTreeGeneration() && dynamicTreeManager != null) {
+            long restructureInterval = 20L * 60 * 60 * 24;
+            
+            getServer().getGlobalRegionScheduler().runAtFixedRate(this, task -> {
+                getLogger().info("Running automatic tree restructure analysis...");
+                dynamicTreeManager.autoRestructureIfNeeded();
+            }, restructureInterval, restructureInterval);
+            
+            getLogger().info("Automatic tree restructuring enabled (every 24 hours)");
+        }
 
         getLogger().info("Background tasks started");
     }
@@ -225,10 +246,6 @@ public final class Atom extends JavaPlugin {
         return effectManager;
     }
     
-    public FeedbackManager getFeedbackManager() {
-        return feedbackManager;
-    }
-    
     public MilestoneManager getMilestoneManager() {
         return milestoneManager;
     }
@@ -247,5 +264,17 @@ public final class Atom extends JavaPlugin {
     
     public XpTransfer getXpTransfer() {
         return xpTransfer;
+    }
+    
+    public org.shotrush.atom.ml.DynamicTreeManager getDynamicTreeManager() {
+        return dynamicTreeManager;
+    }
+    
+    public org.shotrush.atom.ml.SkillLinkingSystem getSkillLinkingSystem() {
+        return skillLinkingSystem;
+    }
+    
+    public org.shotrush.atom.storage.TreeStorage getTreeStorage() {
+        return treeStorage;
     }
 }

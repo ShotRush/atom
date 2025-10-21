@@ -17,7 +17,7 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.ItemStack;
 import org.shotrush.atom.config.AtomConfig;
 import org.shotrush.atom.detection.CraftDetection;
-import org.shotrush.atom.effects.FeedbackManager;
+import org.shotrush.atom.effects.EffectManager;
 import org.shotrush.atom.engine.XpEngine;
 import org.shotrush.atom.manager.PlayerDataManager;
 import org.shotrush.atom.milestone.MilestoneManager;
@@ -31,7 +31,7 @@ public final class SkillEventListener implements Listener {
     private final AtomConfig config;
     private final PlayerDataManager dataManager;
     private final XpEngine xpEngine;
-    private final FeedbackManager feedbackManager;
+    private final EffectManager effectManager;
     private final MilestoneManager milestoneManager;
     private final org.shotrush.atom.advancement.AdvancementGenerator advancementGenerator;
     private final org.shotrush.atom.tree.SkillTreeRegistry treeRegistry;
@@ -40,7 +40,7 @@ public final class SkillEventListener implements Listener {
         AtomConfig config,
         PlayerDataManager dataManager, 
         XpEngine xpEngine,
-        FeedbackManager feedbackManager,
+        EffectManager effectManager,
         MilestoneManager milestoneManager,
         org.shotrush.atom.advancement.AdvancementGenerator advancementGenerator,
         org.shotrush.atom.tree.SkillTreeRegistry treeRegistry
@@ -48,12 +48,11 @@ public final class SkillEventListener implements Listener {
         this.config = Objects.requireNonNull(config);
         this.dataManager = Objects.requireNonNull(dataManager);
         this.xpEngine = Objects.requireNonNull(xpEngine);
-        this.feedbackManager = Objects.requireNonNull(feedbackManager);
+        this.effectManager = Objects.requireNonNull(effectManager);
         this.milestoneManager = Objects.requireNonNull(milestoneManager);
         this.advancementGenerator = Objects.requireNonNull(advancementGenerator);
         this.treeRegistry = Objects.requireNonNull(treeRegistry);
     }
-    
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
         Player player = event.getPlayer();

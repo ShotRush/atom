@@ -1,11 +1,15 @@
 auto-save-interval: 300
 
+# Advancement system configuration
+advancement-grant-threshold: 0.01  # Grant advancements at 1% progress (0.01 = 1%, 1.0 = 100%)
+
 features:
   penalties: true
   bonuses: true
   feedback: true
   tool-reinforcement: true
   xp-transfer: true
+  dynamic-tree-generation: false  # Enable ML-based dynamic tree generation (experimental)
 
 parent-xp:
   multiplier: 1.0  # Root gets 100% of XP first

@@ -1,6 +1,6 @@
 package org.shotrush.atom.milestone;
 
-import org.shotrush.atom.effects.FeedbackManager;
+import org.shotrush.atom.effects.EffectManager;
 import org.shotrush.atom.engine.XpEngine;
 import org.shotrush.atom.model.PlayerSkillData;
 import org.bukkit.entity.Player;
@@ -11,13 +11,13 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class MilestoneManager {
     
     private final XpEngine xpEngine;
-    private final FeedbackManager feedbackManager;
+    private final EffectManager effectManager;
     private final List<Milestone> milestones;
     private final Map<UUID, Set<String>> completedMilestones;
     
-    public MilestoneManager(XpEngine xpEngine, FeedbackManager feedbackManager) {
+    public MilestoneManager(XpEngine xpEngine, EffectManager effectManager) {
         this.xpEngine = xpEngine;
-        this.feedbackManager = feedbackManager;
+        this.effectManager = effectManager;
         this.milestones = createDefaultMilestones();
         this.completedMilestones = new ConcurrentHashMap<>();
     }
@@ -72,7 +72,7 @@ public final class MilestoneManager {
             
             if (currentLevel >= milestone.requiredLevel()) {
                 playerMilestones.add(milestone.id());
-                feedbackManager.sendMilestoneReached(player, milestone.displayName());
+                effectManager.sendMilestoneReached(player, milestone.displayName());
             }
         }
     }

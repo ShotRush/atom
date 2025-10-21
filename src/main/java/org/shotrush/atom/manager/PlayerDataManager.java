@@ -77,4 +77,8 @@ public final class PlayerDataManager {
     public void clearCache() {
         cache.clear();
     }
+    
+    public Collection<PlayerSkillData> getAllCachedData() {
+        return Collections.unmodifiableCollection(cache.values());
+    }
 }

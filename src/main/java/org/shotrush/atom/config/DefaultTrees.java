@@ -1,6 +1,8 @@
 package org.shotrush.atom.config;
 
+import java.util.ArrayList;
 import java.util.List;
+
 
 public final class DefaultTrees {
     
@@ -8,14 +10,54 @@ public final class DefaultTrees {
     
     public static List<TreeDefinition> createDefaultTrees(AtomConfig atomConfig) {
         config = atomConfig;
-        return List.of(createMainTree());
+        
+        if (atomConfig.enableDynamicTreeGeneration()) {
+            return List.of(createDynamicMainTree());
+        } else {
+            return List.of(createStaticMainTree());
+        }
     }
     
     private static int xp(int depth) {
         return config != null ? config.getDepthXpRequirement(depth) : (depth * 5000);
     }
     
-    private static TreeDefinition createMainTree() {
+    
+    private static TreeDefinition createDynamicMainTree() {
+        return new TreeDefinition(
+            "main",
+            1.0,
+            new TreeDefinition.NodeDefinition(
+                "root",
+                "All Skills",
+                100000,
+                "ROOT",
+                List.of(
+                    createStaticCluster("farmer", "Farmer", "Master the art of farming and animal husbandry"),
+                    createStaticCluster("guardsman", "Guardsman", "Become a skilled warrior and defender"),
+                    createStaticCluster("miner", "Miner", "Extract valuable resources from the earth"),
+                    createStaticCluster("healer", "Healer", "Brew potions and support your allies"),
+                    createStaticCluster("blacksmith", "Blacksmith", "Forge powerful tools and armor"),
+                    createStaticCluster("builder", "Builder", "Construct magnificent structures"),
+                    createStaticCluster("librarian", "Librarian", "Unlock the secrets of enchantment")
+                )
+            )
+        );
+    }
+    
+    
+    private static TreeDefinition.NodeDefinition createStaticCluster(String id, String displayName, String description) {
+        return new TreeDefinition.NodeDefinition(
+            id,
+            displayName,
+            xp(1),
+            "BRANCH",
+            new ArrayList<>()
+        );
+    }
+    
+    
+    private static TreeDefinition createStaticMainTree() {
         return new TreeDefinition(
             "main",
             1.0,

@@ -26,6 +26,7 @@ dependencies {
     implementation("org.xerial:sqlite-jdbc:3.46.1.0")
     implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
     implementation("org.yaml:snakeyaml:2.2")
+    implementation("com.google.code.gson:gson:2.10.1")
 }
 
 tasks {
@@ -68,6 +69,7 @@ shadowJar {
     relocate 'co.aikar.locales', 'org.shotrush.atom.locales'
     relocate 'com.zaxxer.hikari', 'org.shotrush.atom.hikari'
     relocate 'com.github.benmanes.caffeine', 'org.shotrush.atom.caffeine'
+    relocate 'com.google.gson', 'org.shotrush.atom.gson'
     archiveClassifier.set('')
 }
 

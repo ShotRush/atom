@@ -20,11 +20,13 @@ public final class AdvancementGenerator {
     private final Plugin plugin;
     private final XpEngine xpEngine;
     private final Map<String, NamespacedKey> skillAdvancementKeys;
+    private final org.shotrush.atom.config.AtomConfig config;
     
-    public AdvancementGenerator(Plugin plugin, XpEngine xpEngine) {
+    public AdvancementGenerator(Plugin plugin, XpEngine xpEngine, org.shotrush.atom.config.AtomConfig config) {
         this.plugin = plugin;
         this.xpEngine = xpEngine;
         this.skillAdvancementKeys = new HashMap<>();
+        this.config = config;
     }
     
     public void generateAdvancementsForTree(SkillTree tree) {
@@ -299,18 +301,17 @@ public final class AdvancementGenerator {
         var advancementProgress = player.getAdvancementProgress(advancement);
         boolean wasCompleted = advancementProgress.isDone();
         
-        if (progress >= 1.0) {
-            if (!wasCompleted) {
-                System.out.println("[Advancement Grant] " + player.getName() + " completed '" + node.id() + 
-                    "' (" + effectiveXp.intrinsicXp() + "+" + effectiveXp.honoraryXp() + " XP, " + 
-                    String.format("%.1f%%", progress * 100) + ")");
-            }
+        double threshold = config.advancementGrantThreshold();
+        boolean shouldBeGranted = progress >= threshold;
+        
+        if (shouldBeGranted && !wasCompleted) {
+            System.out.println("[Advancement Grant] " + player.getName() + " unlocked '" + node.id() + 
+                "' (" + effectiveXp.intrinsicXp() + "+" + effectiveXp.honoraryXp() + " XP, " + 
+                String.format("%.1f%%", progress * 100) + ")");
             advancementProgress.awardCriteria("trigger");
-        } else {
-            if (wasCompleted) {
-                System.out.println("[Advancement Revoke] " + player.getName() + " lost '" + node.id() + 
-                    "' (now " + String.format("%.1f%%", progress * 100) + ")");
-            }
+        } else if (!shouldBeGranted && wasCompleted) {
+            System.out.println("[Advancement Revoke] " + player.getName() + " lost '" + node.id() + 
+                "' (now " + String.format("%.1f%%", progress * 100) + ")");
             advancementProgress.revokeCriteria("trigger");
         }
         

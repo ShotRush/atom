@@ -1,5 +1,9 @@
 package org.shotrush.atom.effects;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.title.Title;
+import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.shotrush.atom.config.AtomConfig;
@@ -14,6 +18,7 @@ import org.shotrush.atom.progression.RecipeManager;
 import org.shotrush.atom.progression.UnlockSystem;
 import org.shotrush.atom.tree.SkillTreeRegistry;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -120,6 +125,64 @@ public final class EffectManager {
         return cache != null ? cache.metrics : Map.of();
     }
     
+    
+    public void sendXpGain(Player player, String skillId, long amount) {
+        if (!config.enableFeedback()) return;
+        
+        Component message = Component.text("+ ", NamedTextColor.GREEN)
+            .append(Component.text(amount, NamedTextColor.GOLD))
+            .append(Component.text(" XP ", NamedTextColor.GREEN))
+            .append(Component.text("(" + formatSkillId(skillId) + ")", NamedTextColor.GRAY));
+        
+        player.sendActionBar(message);
+    }
+    
+    public void sendPenalty(Player player, String skillId, double penaltyPercent) {
+        if (!config.enableFeedback()) return;
+        
+        Component message = Component.text("⚠ ", NamedTextColor.RED)
+            .append(Component.text(String.format("%.0f%%", penaltyPercent * 100), NamedTextColor.YELLOW))
+            .append(Component.text(" penalty ", NamedTextColor.RED))
+            .append(Component.text("(" + formatSkillId(skillId) + ")", NamedTextColor.GRAY));
+        
+        player.sendActionBar(message);
+    }
+    
+    public void sendBonus(Player player, String skillId, double bonusPercent) {
+        if (!config.enableFeedback()) return;
+        
+        Component message = Component.text("✓ ", NamedTextColor.GREEN)
+            .append(Component.text(String.format("%.0f%%", bonusPercent * 100), NamedTextColor.GOLD))
+            .append(Component.text(" bonus ", NamedTextColor.GREEN))
+            .append(Component.text("(" + formatSkillId(skillId) + ")", NamedTextColor.GRAY));
+        
+        player.sendActionBar(message);
+    }
+    
+    public void sendMilestoneReached(Player player, String milestoneName) {
+        if (!config.enableFeedback()) return;
+        
+        Component title = Component.text("Milestone Reached!", NamedTextColor.GOLD);
+        Component subtitle = Component.text(milestoneName, NamedTextColor.YELLOW);
+        
+        player.showTitle(Title.title(
+            title,
+            subtitle,
+            Title.Times.times(
+                Duration.ofMillis(500),
+                Duration.ofSeconds(3),
+                Duration.ofMillis(1000)
+            )
+        ));
+        
+        player.playSound(player.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 1.0f, 1.0f);
+    }
+    
+    private String formatSkillId(String skillId) {
+        String[] parts = skillId.split("\\.");
+        String last = parts[parts.length - 1];
+        return last.substring(0, 1).toUpperCase() + last.substring(1).replace("_", " ");
+    }
     
     private record SpecializationCache(
         Map<String, SpecializationMetrics> metrics,
