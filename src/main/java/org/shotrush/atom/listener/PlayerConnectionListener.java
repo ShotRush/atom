@@ -13,9 +13,15 @@ import java.util.Objects;
 public final class PlayerConnectionListener implements Listener {
     
     private final PlayerDataManager dataManager;
+    private final org.shotrush.atom.advancement.AdvancementGenerator advancementGenerator;
+    private final org.shotrush.atom.tree.Trees.Registry treeRegistry;
     
-    public PlayerConnectionListener(PlayerDataManager dataManager) {
+    public PlayerConnectionListener(PlayerDataManager dataManager, 
+                                   org.shotrush.atom.advancement.AdvancementGenerator advancementGenerator,
+                                   org.shotrush.atom.tree.Trees.Registry treeRegistry) {
         this.dataManager = Objects.requireNonNull(dataManager, "dataManager cannot be null");
+        this.advancementGenerator = advancementGenerator;
+        this.treeRegistry = treeRegistry;
     }
     
     @EventHandler(priority = EventPriority.LOW)
@@ -24,7 +30,15 @@ public final class PlayerConnectionListener implements Listener {
         
         player.getScheduler().run(
             player.getServer().getPluginManager().getPlugin("Atom"),
-            task -> dataManager.loadPlayerData(player.getUniqueId()),
+            task -> {
+                dataManager.loadPlayerData(player.getUniqueId());
+                
+                dataManager.getCachedPlayerData(player.getUniqueId()).ifPresent(data -> {
+                    for (var tree : treeRegistry.getAllTrees()) {
+                        advancementGenerator.updatePlayerAdvancements(player, data, tree);
+                    }
+                });
+            },
             null
         );
     }

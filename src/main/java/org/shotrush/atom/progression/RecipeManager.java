@@ -23,10 +23,10 @@ public final class RecipeManager implements Listener {
     private final UnlockSystem unlockSystem;
     private final Map<UUID, Set<NamespacedKey>> playerDiscoveredRecipes;
     private final org.shotrush.atom.manager.PlayerDataManager dataManager;
-    private final org.shotrush.atom.tree.SkillTreeRegistry treeRegistry;
+    private final org.shotrush.atom.tree.Trees.Registry treeRegistry;
     
     public RecipeManager(UnlockSystem unlockSystem, org.shotrush.atom.manager.PlayerDataManager dataManager, 
-                         org.shotrush.atom.tree.SkillTreeRegistry treeRegistry) {
+                         org.shotrush.atom.tree.Trees.Registry treeRegistry) {
         this.unlockSystem = unlockSystem;
         this.playerDiscoveredRecipes = new ConcurrentHashMap<>();
         this.dataManager = dataManager;
@@ -59,8 +59,8 @@ public final class RecipeManager implements Listener {
             
             event.getInventory().setResult(null);
             player.sendActionBar(net.kyori.adventure.text.Component.text(
-                "§cInsufficient skill to craft this item",
-                net.kyori.adventure.text.format.NamedTextColor.RED
+                "Insufficient skill",
+                net.kyori.adventure.text.format.NamedTextColor.GRAY
             ));
         } else {
             String itemName = recipe.getResult().getType().name();
@@ -170,52 +170,81 @@ public final class RecipeManager implements Listener {
             return true;
         }
         
-        double totalSkillScore = 0.0;
-        int relevantSkills = 0;
-        int totalSkillsWithXp = 0;
-        
-        for (Map.Entry<String, Long> entry : playerData.getAllIntrinsicXp().entrySet()) {
-            SkillNode node = allNodes.get(entry.getKey());
-            if (node == null) continue;
-            
-            if (entry.getValue() > 0) totalSkillsWithXp++;
-            
-            double ratio = entry.getValue() / (double) node.maxXp();
-            
-            if (ratio > 0.5 && node.depth() >= 2) {
-                totalSkillScore += ratio;
-                relevantSkills++;
-                
-                if (ratio > 1.5) {
-                    totalSkillScore += (ratio - 1.5) * 0.5;
-                }
-            }
-        }
-        
-        if (totalSkillsWithXp == 0) {
-            return false;
-        }
-        
-        if (relevantSkills >= 2 && totalSkillScore > 1.5) {
+        String skillId = getSkillIdForRecipe(result);
+        if (skillId == null) {
+            System.out.println("[Recipe Debug] No skill mapping for: " + result.name());
             return true;
         }
         
-        return unlockSystem.canCraft(player, result, playerData, allNodes);
+        SkillNode node = allNodes.get(skillId);
+        if (node == null) {
+            System.out.println("[Recipe Debug] Node not found: " + skillId);
+            return true;
+        }
+        
+        long intrinsicXp = playerData.getIntrinsicXp(skillId);
+        double progress = intrinsicXp / (double) node.maxXp();
+        double threshold = getThresholdForMaterial(result);
+        
+        System.out.println("[Recipe Debug] " + result.name() + " requires " + skillId + 
+            " progress: " + String.format("%.2f%%", progress * 100) + 
+            " threshold: " + String.format("%.2f%%", threshold * 100));
+        
+        return progress >= threshold;
     }
     
     private boolean isBasicRecipe(Material material) {
         String name = material.name().toLowerCase();
+        return name.contains("planks") || name.equals("stick") || name.equals("crafting_table") ||
+               name.startsWith("wooden_") || name.equals("torch") || name.equals("chest");
+    }
+    
+    private String getSkillIdForRecipe(Material material) {
+        String name = material.name().toLowerCase();
         
-        if (name.contains("planks") || name.equals("stick") || name.equals("crafting_table")) {
-            return true;
+        if (name.contains("stone") && !name.contains("bricks")) {
+            return "miner";
         }
         
-        if (name.startsWith("wooden_") && (name.contains("pickaxe") || name.contains("axe") || 
-            name.contains("shovel") || name.contains("hoe") || name.contains("sword"))) {
-            return true;
+        if (name.contains("iron") || name.contains("gold") || name.contains("diamond") || 
+            name.contains("netherite")) {
+            return "blacksmith";
         }
-
-        return name.equals("torch") || name.equals("chest") || name.equals("furnace");
+        
+        if (name.contains("furnace") || name.contains("anvil") || name.contains("smithing")) {
+            return "blacksmith";
+        }
+        
+        if (name.contains("enchant") || name.contains("book")) {
+            return "librarian";
+        }
+        
+        if (name.contains("brewing") || name.contains("potion") || name.contains("cauldron")) {
+            return "healer";
+        }
+        
+        if (name.contains("hoe") || name.contains("composter")) {
+            return "farmer";
+        }
+        
+        if (name.contains("bricks") || name.contains("stairs") || name.contains("slab") || 
+            name.contains("wall") || name.contains("fence")) {
+            return "builder";
+        }
+        
+        return null;
+    }
+    
+    private double getThresholdForMaterial(Material material) {
+        String name = material.name().toLowerCase();
+        
+        if (name.contains("stone")) return 0.05;
+        if (name.contains("iron")) return 0.15;
+        if (name.contains("gold")) return 0.20;
+        if (name.contains("diamond")) return 0.40;
+        if (name.contains("netherite")) return 0.70;
+        
+        return 0.10;
     }
     
     

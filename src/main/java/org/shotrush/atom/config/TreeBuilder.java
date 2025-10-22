@@ -1,12 +1,15 @@
 package org.shotrush.atom.config;
 
 import org.shotrush.atom.model.SkillNode;
-import org.shotrush.atom.tree.SkillTree;
+import org.shotrush.atom.model.Models.TreeDefinition;
+import org.shotrush.atom.tree.Trees.SkillTree;
 
 import java.util.HashMap;
 import java.util.Map;
 
 public final class TreeBuilder {
+    
+    private TreeBuilder() {}
     
     public static SkillTree buildFromDefinition(TreeDefinition definition) {
         SkillNode root = buildNode(definition.root(), null);
@@ -57,7 +60,6 @@ public final class TreeBuilder {
         return switch (type.toUpperCase()) {
             case "ROOT" -> SkillNode.NodeType.ROOT;
             case "BRANCH" -> SkillNode.NodeType.BRANCH;
-            case "LEAF" -> SkillNode.NodeType.LEAF;
             default -> SkillNode.NodeType.LEAF;
         };
     }

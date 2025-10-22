@@ -12,7 +12,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-public final class SQLiteStorage implements StorageProvider {
+public final class SQLiteStorage implements Storage.Provider {
     
     private final Path databasePath;
     private final ExecutorService executor;
@@ -44,7 +44,7 @@ public final class SQLiteStorage implements StorageProvider {
                 
                 createTables();
             } catch (Exception e) {
-                throw new StorageException("Failed to initialize database", e);
+                throw new Storage.Exception("Failed to initialize database", e);
             }
         }, executor);
     }
@@ -92,7 +92,7 @@ public final class SQLiteStorage implements StorageProvider {
                     executor.shutdownNow();
                 }
             } catch (Exception e) {
-                throw new StorageException("Failed to shutdown database", e);
+                throw new Storage.Exception("Failed to shutdown database", e);
             }
         });
     }
@@ -127,7 +127,7 @@ public final class SQLiteStorage implements StorageProvider {
                 
                 return Optional.of(new PlayerSkillData(playerId, skills));
             } catch (SQLException e) {
-                throw new StorageException("Failed to load player data for " + playerId, e);
+                throw new Storage.Exception("Failed to load player data for " + playerId, e);
             }
         }, executor);
     }
@@ -139,15 +139,10 @@ public final class SQLiteStorage implements StorageProvider {
                 conn.setAutoCommit(false);
                 
                 try {
-                    String upsertPlayer = """
-                        INSERT INTO atom_players (player_id, last_modified)
-                        VALUES (?, ?)
-                        ON CONFLICT(player_id) DO UPDATE SET last_modified = excluded.last_modified
-                    """;
-                    
+                    String upsertPlayer = "INSERT OR REPLACE INTO atom_players (player_id, last_modified) VALUES (?, ?)";
                     try (PreparedStatement stmt = conn.prepareStatement(upsertPlayer)) {
                         stmt.setString(1, playerData.playerId().toString());
-                        stmt.setLong(2, playerData.lastModified());
+                        stmt.setLong(2, System.currentTimeMillis());
                         stmt.executeUpdate();
                     }
                     
@@ -157,21 +152,18 @@ public final class SQLiteStorage implements StorageProvider {
                         stmt.executeUpdate();
                     }
                     
-                    if (!playerData.getAllIntrinsicXp().isEmpty()) {
-                        String insertSkill = "INSERT INTO atom_skills (player_id, skill_id, intrinsic_xp) VALUES (?, ?, ?)";
-                        try (PreparedStatement stmt = conn.prepareStatement(insertSkill)) {
-                            for (Map.Entry<String, Long> entry : playerData.getAllIntrinsicXp().entrySet()) {
-                                stmt.setString(1, playerData.playerId().toString());
-                                stmt.setString(2, entry.getKey());
-                                stmt.setLong(3, entry.getValue());
-                                stmt.addBatch();
-                            }
-                            stmt.executeBatch();
+                    String insertSkill = "INSERT INTO atom_skills (player_id, skill_id, intrinsic_xp) VALUES (?, ?, ?)";
+                    try (PreparedStatement stmt = conn.prepareStatement(insertSkill)) {
+                        for (Map.Entry<String, Long> entry : playerData.getAllIntrinsicXp().entrySet()) {
+                            stmt.setString(1, playerData.playerId().toString());
+                            stmt.setString(2, entry.getKey());
+                            stmt.setLong(3, entry.getValue());
+                            stmt.addBatch();
                         }
+                        stmt.executeBatch();
                     }
                     
                     conn.commit();
-                    playerData.markClean();
                 } catch (SQLException e) {
                     conn.rollback();
                     throw e;
@@ -179,7 +171,7 @@ public final class SQLiteStorage implements StorageProvider {
                     conn.setAutoCommit(true);
                 }
             } catch (SQLException e) {
-                throw new StorageException("Failed to save player data for " + playerData.playerId(), e);
+                throw new Storage.Exception("Failed to save player data for " + playerData.playerId(), e);
             }
         }, executor);
     }
@@ -194,7 +186,7 @@ public final class SQLiteStorage implements StorageProvider {
                     stmt.executeUpdate();
                 }
             } catch (SQLException e) {
-                throw new StorageException("Failed to delete player data for " + playerId, e);
+                throw new Storage.Exception("Failed to delete player data for " + playerId, e);
             }
         }, executor);
     }
@@ -210,7 +202,7 @@ public final class SQLiteStorage implements StorageProvider {
                     return rs.next();
                 }
             } catch (SQLException e) {
-                throw new StorageException("Failed to check player data existence for " + playerId, e);
+                throw new Storage.Exception("Failed to check player data existence for " + playerId, e);
             }
         }, executor);
     }

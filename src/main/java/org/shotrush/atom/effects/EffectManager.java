@@ -16,7 +16,7 @@ import org.shotrush.atom.progression.DepthProgression;
 import org.shotrush.atom.progression.DepthProgression.SpecializationMetrics;
 import org.shotrush.atom.progression.RecipeManager;
 import org.shotrush.atom.progression.UnlockSystem;
-import org.shotrush.atom.tree.SkillTreeRegistry;
+import org.shotrush.atom.tree.Trees.Registry;
 
 import java.time.Duration;
 import java.util.Map;
@@ -28,14 +28,14 @@ public final class EffectManager {
     
     private final Plugin plugin;
     private final AtomConfig config;
+    private final Registry treeRegistry;
     private final XpEngine xpEngine;
-    private final SkillTreeRegistry treeRegistry;
     private final AttributeModifierSystem attributeSystem;
     private final UnlockSystem unlockSystem;
     private final RecipeManager recipeManager;
     private final Map<UUID, SpecializationCache> specializationCache;
     
-    public EffectManager(Plugin plugin, AtomConfig config, XpEngine xpEngine, SkillTreeRegistry treeRegistry, 
+    public EffectManager(Plugin plugin, AtomConfig config, XpEngine xpEngine, Registry treeRegistry, 
                          PlayerDataManager dataManager) {
         this.plugin = plugin;
         this.config = config;
@@ -83,32 +83,54 @@ public final class EffectManager {
     
     public double getFarmingDropRateMultiplier(Player player, PlayerSkillData data) {
         SpecializationCache cache = specializationCache.get(player.getUniqueId());
-        if (cache == null) return 1.0;
+        if (cache == null) return 0.5;
         
         SpecializationMetrics farmerMetrics = cache.metrics.get("farmer");
-        if (farmerMetrics == null) return 0.5; 
-        
-        
-        return 1.0 + (farmerMetrics.specializationScore() * 0.5); 
+        if (farmerMetrics == null) return 0.5;
+        return 0.5 + (farmerMetrics.specializationScore());
     }
     
     
     public double getToolDurabilityMultiplier(Player player, String category, PlayerSkillData data) {
         SpecializationCache cache = specializationCache.get(player.getUniqueId());
-        if (cache == null) return 1.5; 
+        if (cache == null) return 2.0;
         
         SpecializationMetrics metrics = cache.metrics.get(category);
-        if (metrics == null) return 1.5; 
+        if (metrics == null) return 2.0;
         
-        
-        return 1.0 - (metrics.specializationScore() * 0.3); 
+        double score = metrics.specializationScore();
+        return 2.0 - (score * 1.5);
     }
     
-    
-    public void clearPlayerEffects(UUID playerId) {
-        specializationCache.remove(playerId);
+    public void applyMiningPenalty(Player player, PlayerSkillData data) {
+        SpecializationCache cache = specializationCache.get(player.getUniqueId());
+        if (cache == null) {
+
+            player.addPotionEffect(new org.bukkit.potion.PotionEffect(
+                org.bukkit.potion.PotionEffectType.MINING_FATIGUE, 
+                100,
+                1,   
+                false, 
+                false, 
+                false
+            ));
+            return;
+        }
+        
+        SpecializationMetrics minerMetrics = cache.metrics.get("miner");
+        if (minerMetrics == null || minerMetrics.specializationScore() < 0.3) {
+            int amplifier = minerMetrics == null ? 1 : 0;
+            player.addPotionEffect(new org.bukkit.potion.PotionEffect(
+                org.bukkit.potion.PotionEffectType.MINING_FATIGUE,
+                100,
+                amplifier,
+                false,
+                false,
+                false
+            ));
+        }
+        // Experts (score >= 0.3): no penalty
     }
-    
     
     public UnlockSystem getUnlockSystem() {
         return unlockSystem;
@@ -117,6 +139,10 @@ public final class EffectManager {
     
     public RecipeManager getRecipeManager() {
         return recipeManager;
+    }
+    
+    public void clearPlayerEffects(UUID playerId) {
+        specializationCache.remove(playerId);
     }
     
     

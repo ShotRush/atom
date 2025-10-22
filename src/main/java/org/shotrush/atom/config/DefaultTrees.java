@@ -1,5 +1,7 @@
 package org.shotrush.atom.config;
 
+import org.shotrush.atom.model.Models.TreeDefinition;
+
 import java.util.ArrayList;
 import java.util.List;
 

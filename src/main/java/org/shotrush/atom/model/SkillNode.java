@@ -86,6 +86,10 @@ public final class SkillNode {
         return depth;
     }
     
+    public void addChild(SkillNode child) {
+        children.put(child.id(), child);
+    }
+    
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

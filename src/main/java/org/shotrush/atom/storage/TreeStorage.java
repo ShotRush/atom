@@ -3,7 +3,7 @@ package org.shotrush.atom.storage;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import org.bukkit.plugin.Plugin;
-import org.shotrush.atom.config.TreeDefinition;
+import org.shotrush.atom.model.Models.TreeDefinition;
 
 import java.io.File;
 import java.io.FileReader;

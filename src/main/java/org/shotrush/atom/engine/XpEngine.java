@@ -1,26 +1,37 @@
 package org.shotrush.atom.engine;
 
-import org.shotrush.atom.model.EffectiveXp;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
+import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
+import org.shotrush.atom.model.Models.EffectiveXp;
 import org.shotrush.atom.model.PlayerSkillData;
 import org.shotrush.atom.model.SkillNode;
-import org.shotrush.atom.tree.SkillTree;
-import org.shotrush.atom.tree.SkillTreeRegistry;
-
+import org.shotrush.atom.tree.Trees;
+import org.shotrush.atom.tree.Trees.SkillTree;
+import org.shotrush.atom.tree.Trees.Registry;
 import java.util.*;
+
+import static org.shotrush.atom.engine.XpCalculator.*;
 
 public final class XpEngine {
     
-    private final SkillTreeRegistry treeRegistry;
-    private final XpCalculator calculator;
-    private final org.shotrush.atom.tree.MultiTreeAggregator aggregator;
+    private final Registry treeRegistry;
+    private final Trees.Aggregator aggregator;
     private final org.shotrush.atom.config.AtomConfig config;
+    private final XpCalculator calculator;
+    private org.shotrush.atom.advancement.AdvancementGenerator advancementGenerator;
     
-    public XpEngine(SkillTreeRegistry treeRegistry, org.shotrush.atom.tree.MultiTreeAggregator aggregator, 
-                    org.shotrush.atom.config.AtomConfig config) {
+    public XpEngine(Registry treeRegistry, Trees.Aggregator aggregator, org.shotrush.atom.config.AtomConfig config) {
         this.treeRegistry = Objects.requireNonNull(treeRegistry, "treeRegistry cannot be null");
         this.aggregator = aggregator;
-        this.calculator = new XpCalculator();
         this.config = Objects.requireNonNull(config, "config cannot be null");
+        this.calculator = new XpCalculator();
+    }
+    
+    public void setAdvancementGenerator(org.shotrush.atom.advancement.AdvancementGenerator generator) {
+        this.advancementGenerator = generator;
     }
     
     public void awardXp(PlayerSkillData playerData, String skillId, long amount) {
@@ -33,6 +44,31 @@ public final class XpEngine {
         
         Optional<SkillNode> nodeOpt = treeRegistry.findNode(skillId);
         if (nodeOpt.isEmpty()) {
+            playerData.addIntrinsicXp(skillId, amount);
+            
+            String rootCategory = extractRootCategory(skillId);
+            Optional<SkillNode> rootNodeOpt = treeRegistry.findNode(rootCategory);
+            
+            if (rootNodeOpt.isPresent()) {
+                SkillNode rootNode = rootNodeOpt.get();
+                
+                createDynamicNodeHierarchy(skillId, rootNode);
+                
+                propagateXpTopDown(playerData, rootNode, amount);
+                
+                if (aggregator != null) {
+                    aggregator.updatePlayerWeights(playerData.playerId(), playerData);
+                }
+            } else {
+                playerData.addIntrinsicXp(rootCategory, amount);
+            }
+            
+            calculator.invalidateCache(playerData.playerId());
+            
+            if (config.enableFeedback()) {
+                String displayName = formatDisplayName(skillId.substring(skillId.lastIndexOf('.') + 1));
+                showXpFeedback(playerData.playerId(), amount, displayName);
+            }
             return;
         }
         
@@ -45,6 +81,91 @@ public final class XpEngine {
         if (aggregator != null) {
             aggregator.updatePlayerWeights(playerData.playerId(), playerData);
         }
+        
+        if (config.enableFeedback()) {
+            showXpFeedback(playerData.playerId(), amount, node.displayName());
+        }
+    }
+    
+    private String extractRootCategory(String skillId) {
+        int firstDot = skillId.indexOf('.');
+        if (firstDot == -1) {
+            return skillId;
+        }
+        return skillId.substring(0, firstDot);
+    }
+    
+    private void createDynamicNodeHierarchy(String skillId, SkillNode rootNode) {
+        String[] parts = skillId.split("\\.");
+        if (parts.length < 2) return;
+        
+        SkillNode currentParent = rootNode;
+        StringBuilder currentPath = new StringBuilder(parts[0]);
+        
+        for (int i = 1; i < parts.length; i++) {
+            currentPath.append(".").append(parts[i]);
+            String nodeId = currentPath.toString();
+            
+            Optional<SkillNode> existingNode = treeRegistry.findNode(nodeId);
+            if (existingNode.isPresent()) {
+                currentParent = existingNode.get();
+            } else {
+                String displayName = formatDisplayName(parts[i]);
+                int depth = i + 1;
+                int maxXp = calculateDynamicMaxXp(depth);
+                
+                SkillNode newNode = SkillNode.builder()
+                    .id(nodeId)
+                    .displayName(displayName)
+                    .parent(currentParent)
+                    .maxXp(maxXp)
+                    .type(i == parts.length - 1 ? SkillNode.NodeType.LEAF : SkillNode.NodeType.BRANCH)
+                    .build();
+                
+                currentParent.addChild(newNode);
+                
+                if (advancementGenerator != null) {
+                    advancementGenerator.generateNodeAdvancement(newNode, currentParent.id());
+                }
+                
+                currentParent = newNode;
+                
+                System.out.println("[Dynamic Node] Created: " + nodeId + 
+                    " (depth: " + depth + ", maxXp: " + maxXp + ", type: " + newNode.type() + ")");
+            }
+        }
+    }
+    
+    private String formatDisplayName(String part) {
+        return java.util.Arrays.stream(part.split("_"))
+            .map(word -> word.substring(0, 1).toUpperCase() + word.substring(1))
+            .collect(java.util.stream.Collectors.joining(" "));
+    }
+    
+    private int calculateDynamicMaxXp(int depth) {
+        return switch (depth) {
+            case 1 -> 1000;
+            case 2 -> 5000;
+            case 3 -> 10000;
+            case 4 -> 15000;
+            case 5 -> 25000;
+            case 6 -> 40000;
+            case 7 -> 60000;
+            case 8 -> 100000;
+            default -> 150000;
+        };
+    }
+    
+    private void showXpFeedback(UUID playerId, long amount, String skillName) {
+        Player player = Bukkit.getPlayer(playerId);
+        if (player == null || !player.isOnline()) {
+            return;
+        }
+        
+        Component message = Component.text("+" + amount + " ", NamedTextColor.GRAY)
+            .append(Component.text(skillName, NamedTextColor.WHITE));
+        
+        player.sendActionBar(message);
     }
     
     private void propagateXpTopDown(PlayerSkillData playerData, SkillNode node, long amount) {
@@ -53,11 +174,10 @@ public final class XpEngine {
         
         while (current != null) {
             pathToClass.add(current);
-            current = current.parent().orElse(null);
-            
-            if (current != null && current.depth() == 0) {
+            if (current.depth() == 0) {
                 break;
             }
+            current = current.parent().orElse(null);
         }
         
         Collections.reverse(pathToClass);

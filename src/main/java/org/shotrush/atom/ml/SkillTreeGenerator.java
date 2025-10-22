@@ -1,6 +1,6 @@
 package org.shotrush.atom.ml;
 
-import org.shotrush.atom.config.TreeDefinition;
+import org.shotrush.atom.model.Models.TreeDefinition;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -23,18 +23,26 @@ public final class SkillTreeGenerator {
         int maxDepth
     ) {
         if (playerActionData.isEmpty()) {
+            System.out.println("[SkillTreeGenerator] No action data provided");
             return List.of();
         }
         
         List<ActionFrequency> relevantActions = filterActionsByCluster(rootClusterId, playerActionData);
         
+        System.out.println("[SkillTreeGenerator] Filtered " + relevantActions.size() + " relevant actions for " + rootClusterId + 
+            " (min required: " + minClusterSize + ")");
+        
         if (relevantActions.size() < minClusterSize) {
+            System.out.println("[SkillTreeGenerator] Not enough actions to generate branches (need at least " + minClusterSize + ")");
             return List.of();
         }
         
         ClusterNode rootCluster = performHierarchicalClustering(relevantActions, maxDepth);
         
-        return convertClusterToNodeDefinitions(rootCluster, rootClusterId, 2);
+        List<TreeDefinition.NodeDefinition> branches = convertClusterToNodeDefinitions(rootCluster, rootClusterId, 2);
+        System.out.println("[SkillTreeGenerator] Generated " + branches.size() + " branch definitions");
+        
+        return branches;
     }
     
     
@@ -48,60 +56,81 @@ public final class SkillTreeGenerator {
     private boolean isActionRelevantToCluster(ActionFrequency action, String clusterId) {
         String material = action.materialType().toLowerCase();
         String actionId = action.actionId().toLowerCase();
+        String context = material + "_" + actionId;
         
-        return switch (clusterId) {
-            case "miner" -> isMiningAction(material, actionId);
-            case "farmer" -> isFarmingAction(material, actionId);
-            case "guardsman" -> isCombatAction(material, actionId);
-            case "blacksmith" -> isCraftingAction(material, actionId);
-            case "builder" -> isBuildingAction(material, actionId);
-            case "healer" -> isHealingAction(material, actionId);
-            case "librarian" -> isKnowledgeAction(material, actionId);
-            default -> false;
-        };
+        return calculateClusterRelevance(context, clusterId) > 0.3;
     }
     
-    private boolean isMiningAction(String material, String actionId) {
-        return material.contains("ore") || material.contains("stone") || 
-               material.contains("andesite") || material.contains("diorite") || 
-               material.contains("granite") || actionId.contains("mine");
+    private double calculateClusterRelevance(String context, String targetCluster) {
+        Map<String, Integer> clusterVotes = new HashMap<>();
+        String[] knownClusters = {"miner", "farmer", "guardsman", "blacksmith", "builder", "librarian", "healer"};
+        
+        for (String cluster : knownClusters) {
+            double similarity = calculateContextSimilarity(context, cluster);
+            if (similarity > 0) {
+                clusterVotes.put(cluster, (int)(similarity * 100));
+            }
+        }
+        
+        if (clusterVotes.isEmpty()) {
+            return inferFromSeeds(context, targetCluster);
+        }
+        
+        int targetVotes = clusterVotes.getOrDefault(targetCluster, 0);
+        int totalVotes = clusterVotes.values().stream().mapToInt(Integer::intValue).sum();
+        
+        return totalVotes > 0 ? (double) targetVotes / totalVotes : 0.0;
     }
     
-    private boolean isFarmingAction(String material, String actionId) {
-        return material.contains("wheat") || material.contains("carrot") || 
-               material.contains("potato") || material.contains("beetroot") ||
-               material.contains("cow") || material.contains("sheep") ||
-               material.contains("pig") || material.contains("chicken") ||
-               actionId.contains("farm") || actionId.contains("breed") || actionId.contains("plant");
+    private double calculateContextSimilarity(String context, String cluster) {
+        String[] contextWords = context.split("[_\\s]+");
+        double maxSimilarity = 0.0;
+        
+        for (String word : contextWords) {
+            if (word.length() < 3) continue;
+            
+            double similarity = calculateWordClusterAffinity(word, cluster);
+            maxSimilarity = Math.max(maxSimilarity, similarity);
+        }
+        
+        return maxSimilarity;
     }
     
-    private boolean isCombatAction(String material, String actionId) {
-        return material.contains("zombie") || material.contains("skeleton") ||
-               material.contains("spider") || material.contains("creeper") ||
-               actionId.contains("kill") || actionId.contains("combat");
+    private double calculateWordClusterAffinity(String word, String cluster) {
+        Map<String, String[]> clusterSeeds = Map.of(
+            "miner", new String[]{"ore", "stone", "mine", "coal", "iron", "diamond"},
+            "farmer", new String[]{"wheat", "crop", "farm", "cow", "sheep", "breed"},
+            "guardsman", new String[]{"zombie", "skeleton", "kill", "combat", "mob"},
+            "blacksmith", new String[]{"craft", "forge", "anvil", "sword", "armor"},
+            "builder", new String[]{"build", "place", "brick", "wood", "construct"},
+            "librarian", new String[]{"enchant", "book", "knowledge", "trade"},
+            "healer", new String[]{"potion", "brew", "heal", "medicine"}
+        );
+        
+        String[] seeds = clusterSeeds.getOrDefault(cluster, new String[0]);
+        double maxAffinity = 0.0;
+        
+        for (String seed : seeds) {
+            if (word.contains(seed) || seed.contains(word)) {
+                maxAffinity = Math.max(maxAffinity, 1.0 - (Math.abs(word.length() - seed.length()) / 10.0));
+            }
+        }
+        
+        return maxAffinity;
     }
     
-    private boolean isCraftingAction(String material, String actionId) {
-        return material.contains("pickaxe") || material.contains("axe") ||
-               material.contains("shovel") || material.contains("hoe") ||
-               material.contains("helmet") || material.contains("chestplate") ||
-               material.contains("leggings") || material.contains("boots") ||
-               actionId.contains("craft");
-    }
-    
-    private boolean isBuildingAction(String material, String actionId) {
-        return material.contains("dirt") || material.contains("wood") ||
-               material.contains("cobblestone") || material.contains("planks") ||
-               material.contains("bricks") || material.contains("quartz") ||
-               actionId.contains("place") || actionId.contains("build");
-    }
-    
-    private boolean isHealingAction(String material, String actionId) {
-        return material.contains("potion") || actionId.contains("brew") || actionId.contains("heal");
-    }
-    
-    private boolean isKnowledgeAction(String material, String actionId) {
-        return material.contains("book") || material.contains("enchant") || actionId.contains("enchant");
+    private double inferFromSeeds(String context, String targetCluster) {
+        String lower = context.toLowerCase();
+        
+        if (targetCluster.equals("miner") && (lower.contains("ore") || lower.contains("stone"))) return 0.8;
+        if (targetCluster.equals("farmer") && (lower.contains("crop") || lower.contains("animal"))) return 0.8;
+        if (targetCluster.equals("guardsman") && (lower.contains("kill") || lower.contains("mob"))) return 0.8;
+        if (targetCluster.equals("blacksmith") && (lower.contains("craft") || lower.contains("forge"))) return 0.8;
+        if (targetCluster.equals("builder") && (lower.contains("build") || lower.contains("place"))) return 0.8;
+        if (targetCluster.equals("librarian") && (lower.contains("enchant") || lower.contains("book"))) return 0.8;
+        if (targetCluster.equals("healer") && (lower.contains("potion") || lower.contains("brew"))) return 0.8;
+        
+        return 0.0;
     }
     
     
@@ -308,15 +337,100 @@ public final class SkillTreeGenerator {
             return "Unknown Branch";
         }
         
-        Map<String, Long> materialCounts = actions.stream()
-            .collect(Collectors.groupingBy(ActionFrequency::materialType, Collectors.counting()));
+        Map<String, Integer> tokenFrequency = new HashMap<>();
         
-        String mostCommon = materialCounts.entrySet().stream()
-            .max(Map.Entry.comparingByValue())
+        for (ActionFrequency action : actions) {
+            String[] tokens = action.materialType().toLowerCase().split("[_\\s]+");
+            for (String token : tokens) {
+                if (token.length() > 2 && !isCommonWord(token)) {
+                    tokenFrequency.merge(token, 1, Integer::sum);
+                }
+            }
+            
+            tokens = action.actionId().toLowerCase().split("[_\\s]+");
+            for (String token : tokens) {
+                if (token.length() > 2 && !isCommonWord(token)) {
+                    tokenFrequency.merge(token, 1, Integer::sum);
+                }
+            }
+        }
+        
+        if (tokenFrequency.isEmpty()) {
+            return "Mixed Skills";
+        }
+        
+        List<String> topTokens = tokenFrequency.entrySet().stream()
+            .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+            .limit(2)
             .map(Map.Entry::getKey)
-            .orElse("Mixed");
+            .collect(Collectors.toList());
         
-        return formatDisplayName(mostCommon) + " Skills";
+        if (topTokens.isEmpty()) {
+            return "Mixed Skills";
+        }
+        
+        String clusterName = topTokens.stream()
+            .map(this::formatDisplayName)
+            .collect(Collectors.joining(" "));
+        
+        String category = inferCategoryFromTokens(topTokens);
+        if (category != null && !category.isEmpty()) {
+            return category;
+        }
+        
+        return clusterName;
+    }
+    
+    private boolean isCommonWord(String word) {
+        Set<String> commonWords = Set.of("the", "and", "or", "but", "for", "with", "from", 
+            "item", "block", "tool", "ore", "type", "use", "get", "set");
+        return commonWords.contains(word.toLowerCase());
+    }
+    
+    private String inferCategoryFromTokens(List<String> tokens) {
+        String combined = String.join(" ", tokens).toLowerCase();
+        
+        if (combined.contains("diamond") || combined.contains("emerald") || combined.contains("netherite")) {
+            return "Precious Materials";
+        }
+        if (combined.contains("iron") || combined.contains("gold") || combined.contains("copper")) {
+            return "Common Metals";
+        }
+        if (combined.contains("coal") || combined.contains("redstone") || combined.contains("lapis")) {
+            return "Utility Resources";
+        }
+        if (combined.contains("stone") || combined.contains("andesite") || combined.contains("diorite") || combined.contains("granite")) {
+            return "Stone Mining";
+        }
+        if (combined.contains("wheat") || combined.contains("carrot") || combined.contains("potato")) {
+            return "Basic Crops";
+        }
+        if (combined.contains("cow") || combined.contains("sheep") || combined.contains("pig") || combined.contains("chicken")) {
+            return "Animal Husbandry";
+        }
+        if (combined.contains("sword") || combined.contains("axe") || combined.contains("pickaxe") || combined.contains("shovel")) {
+            return "Tool Crafting";
+        }
+        if (combined.contains("helmet") || combined.contains("chestplate") || combined.contains("leggings") || combined.contains("boots")) {
+            return "Armor Crafting";
+        }
+        if (combined.contains("wood") || combined.contains("plank") || combined.contains("log")) {
+            return "Woodworking";
+        }
+        if (combined.contains("brick") || combined.contains("concrete") || combined.contains("glass")) {
+            return "Advanced Building";
+        }
+        if (combined.contains("zombie") || combined.contains("skeleton") || combined.contains("spider") || combined.contains("creeper")) {
+            return "Hostile Mobs";
+        }
+        if (combined.contains("potion") || combined.contains("brew")) {
+            return "Brewing";
+        }
+        if (combined.contains("enchant") || combined.contains("book")) {
+            return "Enchanting";
+        }
+        
+        return null;
     }
     
     private int calculateXpRequirement(int depth) {

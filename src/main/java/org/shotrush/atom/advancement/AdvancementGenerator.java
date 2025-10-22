@@ -7,13 +7,15 @@ import org.bukkit.advancement.Advancement;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.shotrush.atom.engine.XpEngine;
-import org.shotrush.atom.model.EffectiveXp;
+import org.shotrush.atom.model.Models.EffectiveXp;
+import org.shotrush.atom.model.Models.Milestone;
 import org.shotrush.atom.model.PlayerSkillData;
 import org.shotrush.atom.model.SkillNode;
-import org.shotrush.atom.tree.SkillTree;
+import org.shotrush.atom.tree.Trees.SkillTree;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 public final class AdvancementGenerator {
     
@@ -21,12 +23,44 @@ public final class AdvancementGenerator {
     private final XpEngine xpEngine;
     private final Map<String, NamespacedKey> skillAdvancementKeys;
     private final org.shotrush.atom.config.AtomConfig config;
+    private final Map<String, Set<String>> playerGrantedAdvancements;
     
     public AdvancementGenerator(Plugin plugin, XpEngine xpEngine, org.shotrush.atom.config.AtomConfig config) {
         this.plugin = plugin;
         this.xpEngine = xpEngine;
         this.skillAdvancementKeys = new HashMap<>();
         this.config = config;
+        this.playerGrantedAdvancements = new java.util.concurrent.ConcurrentHashMap<>();
+        
+        createDatapackStructure();
+    }
+    
+    private void createDatapackStructure() {
+        try {
+            java.nio.file.Path datapackDir = getDatapackPath();
+            java.nio.file.Files.createDirectories(datapackDir);
+            
+            String packMcmeta = "{\n" +
+                "  \"pack\": {\n" +
+                "    \"pack_format\": 15,\n" +
+                "    \"description\": \"Atom Skill System Dynamic Advancements\"\n" +
+                    "  }\n" +
+                    "}";
+            
+            java.nio.file.Path packFile = datapackDir.resolve("pack.mcmeta");
+            if (!java.nio.file.Files.exists(packFile)) {
+                java.nio.file.Files.writeString(packFile, packMcmeta);
+                plugin.getLogger().info("Created Atom datapack structure at: " + datapackDir);
+            }
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to create datapack structure: " + e.getMessage());
+        }
+    }
+    
+    private java.nio.file.Path getDatapackPath() {
+        java.io.File worldContainer = Bukkit.getWorldContainer();
+        java.io.File worldFolder = Bukkit.getWorlds().get(0).getWorldFolder();
+        return worldFolder.toPath().resolve("datapacks/atom");
     }
     
     public void generateAdvancementsForTree(SkillTree tree) {
@@ -34,65 +68,7 @@ public final class AdvancementGenerator {
         plugin.getLogger().info("Generated " + skillAdvancementKeys.size() + " advancements for tree: " + tree.name());
     }
     
-    public void generateMilestoneAdvancements(java.util.List<org.shotrush.atom.milestone.Milestone> milestones) {
-        int count = 0;
-        for (org.shotrush.atom.milestone.Milestone milestone : milestones) {
-            generateMilestoneAdvancement(milestone);
-            count++;
-        }
-        plugin.getLogger().info("Generated " + count + " milestone advancements");
-    }
-    
-    private void generateMilestoneAdvancement(org.shotrush.atom.milestone.Milestone milestone) {
-        String path = "milestones/" + milestone.id();
-        NamespacedKey key = new NamespacedKey(plugin, path);
-        
-        String parentPath = milestone.skillId().replace(".", "/");
-        String icon = getMaterialForMilestone(milestone.skillId());
-        String frame = getFrameForMilestone(milestone);
-        
-        String json = buildAdvancementJson(
-            icon,
-            "§6" + milestone.displayName(),
-            milestone.description() + " (" + (int)milestone.requiredLevel() + "% progress)",
-            frame,
-            "atom:" + parentPath,
-            true,
-            true
-        );
-        
-        loadAdvancement(key, json);
-        skillAdvancementKeys.put("milestones/" + milestone.id(), key);
-    }
-    
-    private String getFrameForMilestone(org.shotrush.atom.milestone.Milestone milestone) {
-        if (milestone.requiredLevel() >= 75.0) {
-            return "challenge";
-        } else if (milestone.requiredLevel() >= 50.0) {
-            return "goal";
-        }
-        return "task";
-    }
-    
-    private String getMaterialForMilestone(String skillId) {
-        String id = skillId.toLowerCase();
-        
-        if (id.contains("miner")) {
-            return "minecraft:diamond_pickaxe";
-        } else if (id.contains("guardsman")) {
-            return "minecraft:diamond_sword";
-        } else if (id.contains("farmer")) {
-            return "minecraft:golden_hoe";
-        } else if (id.contains("blacksmith")) {
-            return "minecraft:anvil";
-        } else if (id.contains("builder")) {
-            return "minecraft:bricks";
-        }
-        
-        return "minecraft:nether_star";
-    }
-    
-    private void generateNodeAdvancement(SkillNode node, String parentId) {
+    public void generateNodeAdvancement(SkillNode node, String parentId) {
         String path = node.id().replace(".", "/");
         NamespacedKey key = new NamespacedKey(plugin, path);
         
@@ -108,17 +84,46 @@ public final class AdvancementGenerator {
         loadAdvancement(key, json);
         skillAdvancementKeys.put(node.id(), key);
         
+        int childIndex = 0;
         for (SkillNode child : node.children().values()) {
             generateNodeAdvancement(child, node.id());
+            childIndex++;
         }
     }
     
     @SuppressWarnings("deprecation")
     private void loadAdvancement(NamespacedKey key, String json) {
         try {
+            Advancement existing = Bukkit.getAdvancement(key);
+            if (existing != null) {
+                return;
+            }
+            
+            String datapackJson = json.replace("\"id\":", "\"item\":");
+            saveAdvancementToDisk(key, datapackJson);
+            
             Bukkit.getUnsafe().loadAdvancement(key, json);
+            plugin.getLogger().info("Loaded advancement: " + key);
         } catch (Exception e) {
             plugin.getLogger().warning("Failed to load advancement " + key + ": " + e.getMessage());
+        }
+    }
+    
+    private void saveAdvancementToDisk(NamespacedKey key, String json) {
+        try {
+            java.nio.file.Path advancementsDir = getDatapackPath()
+                .resolve("data/atom/advancements");
+            java.nio.file.Files.createDirectories(advancementsDir);
+            
+            String path = key.getKey().replace("/", java.io.File.separator);
+            java.nio.file.Path advancementFile = advancementsDir.resolve(path + ".json");
+            
+            if (advancementFile.getParent() != null) {
+                java.nio.file.Files.createDirectories(advancementFile.getParent());
+            }
+            java.nio.file.Files.writeString(advancementFile, json);
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to save advancement to disk: " + e.getMessage());
         }
     }
     
@@ -181,13 +186,13 @@ public final class AdvancementGenerator {
         int depth = node.depth();
         
         if (depth == 0) {
-            return "task";
-        } else if (depth == 1) {
-            return "task";
-        } else if (depth == 2) {
-            return "goal";
-        } else {
             return "challenge";
+        } else if (depth == 1) {
+            return "goal";
+        } else if (depth == 2) {
+            return "task";
+        } else {
+            return "task";
         }
     }
     
@@ -242,17 +247,18 @@ public final class AdvancementGenerator {
     
     private String generateDescription(SkillNode node) {
         int depth = node.depth();
-        String id = node.id().toLowerCase();
         
         if (depth == 0) {
-            return "Begin your journey as a " + node.displayName();
+            return node.displayName() + " Class";
         } else if (depth == 1) {
-            return "Choose the path of " + node.displayName();
+            return node.displayName();
         } else if (depth == 2) {
-            return "Specialize in " + node.displayName();
-        } else {
-            return "Master the art of " + node.displayName();
+            return node.displayName() + " Skills";
+        } else if (depth >= 3) {
+            return "";
         }
+        
+        return node.displayName();
     }
     
     private String formatTitle(String skillId) {
@@ -268,13 +274,15 @@ public final class AdvancementGenerator {
         
         int depth = parts.length - 1;
         if (depth == 0) {
-            return "§6" + title + " (Root)";
+            return "§6§l" + title;
         } else if (depth == 1) {
-            return "§e" + title + " (Class)";
+            return "§e" + title;
         } else if (depth == 2) {
-            return "§a" + title + " (Specialization)";
+            return "§a" + title;
+        } else if (depth == 3) {
+            return "§b" + title;
         } else {
-            return "§d" + title + " (Master)";
+            return "§d" + title;
         }
     }
     
@@ -295,24 +303,25 @@ public final class AdvancementGenerator {
             return;
         }
         
-        EffectiveXp effectiveXp = xpEngine.getEffectiveXp(data, node.id());
-        double progress = effectiveXp.progressPercent();
-        
         var advancementProgress = player.getAdvancementProgress(advancement);
         boolean wasCompleted = advancementProgress.isDone();
         
-        double threshold = config.advancementGrantThreshold();
+        EffectiveXp effectiveXp = xpEngine.getEffectiveXp(data, node.id());
+        double progress = effectiveXp.progressPercent();
+        double threshold = node.isRoot() ? 0.0 : config.advancementGrantThreshold();
         boolean shouldBeGranted = progress >= threshold;
         
+        String playerKey = player.getUniqueId().toString();
+        Set<String> granted = playerGrantedAdvancements.computeIfAbsent(playerKey, k -> java.util.concurrent.ConcurrentHashMap.newKeySet());
+        
         if (shouldBeGranted && !wasCompleted) {
-            System.out.println("[Advancement Grant] " + player.getName() + " unlocked '" + node.id() + 
-                "' (" + effectiveXp.intrinsicXp() + "+" + effectiveXp.honoraryXp() + " XP, " + 
-                String.format("%.1f%%", progress * 100) + ")");
-            advancementProgress.awardCriteria("trigger");
-        } else if (!shouldBeGranted && wasCompleted) {
-            System.out.println("[Advancement Revoke] " + player.getName() + " lost '" + node.id() + 
-                "' (now " + String.format("%.1f%%", progress * 100) + ")");
-            advancementProgress.revokeCriteria("trigger");
+            if (!granted.contains(node.id())) {
+                System.out.println("[Advancement Grant] " + player.getName() + " unlocked '" + node.id() + 
+                    "' (" + effectiveXp.intrinsicXp() + "+" + effectiveXp.honoraryXp() + " XP, " + 
+                    String.format("%.1f%%", progress * 100) + ")");
+                advancementProgress.awardCriteria("trigger");
+                granted.add(node.id());
+            }
         }
         
         for (SkillNode child : node.children().values()) {
@@ -326,6 +335,40 @@ public final class AdvancementGenerator {
             if (advancement != null) {
                 var progress = player.getAdvancementProgress(advancement);
                 progress.revokeCriteria("trigger");
+            }
+        }
+    }
+    
+    public void grantDynamicAdvancement(Player player, String skillId, PlayerSkillData data) {
+        NamespacedKey key = skillAdvancementKeys.get(skillId);
+        if (key == null) {
+            return;
+        }
+        
+        Advancement advancement = Bukkit.getAdvancement(key);
+        if (advancement == null) {
+            return;
+        }
+        
+        var advancementProgress = player.getAdvancementProgress(advancement);
+        if (advancementProgress.isDone()) {
+            return;
+        }
+        
+        EffectiveXp effectiveXp = xpEngine.getEffectiveXp(data, skillId);
+        double progress = effectiveXp.progressPercent();
+        double threshold = config.advancementGrantThreshold();
+        
+        if (progress >= threshold) {
+            String playerKey = player.getUniqueId().toString();
+            Set<String> granted = playerGrantedAdvancements.computeIfAbsent(playerKey, k -> java.util.concurrent.ConcurrentHashMap.newKeySet());
+            
+            if (!granted.contains(skillId)) {
+                System.out.println("[Advancement Grant] " + player.getName() + " unlocked '" + skillId + 
+                    "' (" + effectiveXp.intrinsicXp() + "+" + effectiveXp.honoraryXp() + " XP, " + 
+                    String.format("%.1f%%", progress * 100) + ")");
+                advancementProgress.awardCriteria("trigger");
+                granted.add(skillId);
             }
         }
     }

@@ -7,20 +7,17 @@ import org.shotrush.atom.commands.AtomCommand;
 import org.shotrush.atom.config.AtomConfig;
 import org.shotrush.atom.config.DefaultTrees;
 import org.shotrush.atom.config.TreeBuilder;
-import org.shotrush.atom.config.TreeDefinition;
+import org.shotrush.atom.model.Models.TreeDefinition;
 import org.shotrush.atom.effects.EffectManager;
 import org.shotrush.atom.engine.XpEngine;
-import org.shotrush.atom.features.ToolReinforcement;
-import org.shotrush.atom.features.XpTransfer;
 import org.shotrush.atom.listener.FeatureListener;
 import org.shotrush.atom.listener.PlayerConnectionListener;
 import org.shotrush.atom.listener.SkillEventListener;
 import org.shotrush.atom.manager.PlayerDataManager;
-import org.shotrush.atom.milestone.MilestoneManager;
 import org.shotrush.atom.storage.SQLiteStorage;
-import org.shotrush.atom.storage.StorageProvider;
-import org.shotrush.atom.tree.SkillTree;
-import org.shotrush.atom.tree.SkillTreeRegistry;
+import org.shotrush.atom.storage.Storage;
+import org.shotrush.atom.tree.Trees.SkillTree;
+import org.shotrush.atom.tree.Trees.Registry;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -28,19 +25,19 @@ import java.util.List;
 public final class Atom extends JavaPlugin {
 
     private AtomConfig config;
-    private StorageProvider storage;
+    private Storage.Provider storage;
     private org.shotrush.atom.storage.TreeStorage treeStorage;
     private PlayerDataManager dataManager;
-    private SkillTreeRegistry treeRegistry;
+    private Registry treeRegistry;
     private XpEngine xpEngine;
     private EffectManager effectManager;
-    private MilestoneManager milestoneManager;
     private AdvancementGenerator advancementGenerator;
-    private ToolReinforcement toolReinforcement;
-    private XpTransfer xpTransfer;
-    private org.shotrush.atom.tree.MultiTreeAggregator multiTreeAggregator;
+    private org.shotrush.atom.features.GameplayFeatures gameplayFeatures;
+    private org.shotrush.atom.tree.Trees.Aggregator multiTreeAggregator;
     private org.shotrush.atom.ml.DynamicTreeManager dynamicTreeManager;
     private org.shotrush.atom.ml.SkillLinkingSystem skillLinkingSystem;
+    private org.shotrush.atom.ml.SpecializationClusterer specializationClusterer;
+    private org.shotrush.atom.ml.ActionAnalyzer actionAnalyzer;
     private PaperCommandManager commandManager;
     
     @Override
@@ -109,7 +106,7 @@ public final class Atom extends JavaPlugin {
     }
 
     private void initializeTreeRegistry() {
-        treeRegistry = new SkillTreeRegistry();
+        treeRegistry = new Registry();
 
         List<TreeDefinition> defaultTrees = DefaultTrees.createDefaultTrees(config);
 
@@ -123,16 +120,18 @@ public final class Atom extends JavaPlugin {
 
     private void initializeManagers() {
         dataManager = new PlayerDataManager(storage);
-        multiTreeAggregator = new org.shotrush.atom.tree.MultiTreeAggregator(treeRegistry);
+        multiTreeAggregator = new org.shotrush.atom.tree.Trees.Aggregator(treeRegistry);
         xpEngine = new XpEngine(treeRegistry, multiTreeAggregator, config);
         effectManager = new EffectManager(this, config, xpEngine, treeRegistry, dataManager);
-        milestoneManager = new MilestoneManager(xpEngine, effectManager);
         advancementGenerator = new AdvancementGenerator(this, xpEngine, config);
+        xpEngine.setAdvancementGenerator(advancementGenerator);
         
+        actionAnalyzer = new org.shotrush.atom.ml.ActionAnalyzer(this);
         skillLinkingSystem = new org.shotrush.atom.ml.SkillLinkingSystem(this, treeRegistry, advancementGenerator);
+        specializationClusterer = new org.shotrush.atom.ml.SpecializationClusterer(this, treeRegistry, dataManager, 7);
         
         if (config.enableDynamicTreeGeneration()) {
-            dynamicTreeManager = new org.shotrush.atom.ml.DynamicTreeManager(this, treeRegistry, dataManager, treeStorage);
+            dynamicTreeManager = new org.shotrush.atom.ml.DynamicTreeManager(this, treeRegistry, dataManager, treeStorage, specializationClusterer);
             getLogger().info("Dynamic tree generation enabled - trees will persist across restarts");
         }
         
@@ -140,32 +139,30 @@ public final class Atom extends JavaPlugin {
             advancementGenerator.generateAdvancementsForTree(tree);
         }
         
-        advancementGenerator.generateMilestoneAdvancements(milestoneManager.getAllMilestones());
         
         getLogger().info("Managers initialized");
         getLogger().info("Advancements loaded");
     }
     
     private void initializeFeatures() {
-        toolReinforcement = new ToolReinforcement(this);
-        xpTransfer = new XpTransfer(this);
+        gameplayFeatures = new org.shotrush.atom.features.GameplayFeatures(this);
         
         getLogger().info("Features initialized");
     }
 
     private void registerListeners() {
         getServer().getPluginManager().registerEvents(
-            new PlayerConnectionListener(dataManager),
+            new PlayerConnectionListener(dataManager, advancementGenerator, treeRegistry),
             this
         );
 
         getServer().getPluginManager().registerEvents(
-            new SkillEventListener(config, dataManager, xpEngine, effectManager, milestoneManager, advancementGenerator, treeRegistry),
+            new SkillEventListener(config, dataManager, xpEngine, effectManager, advancementGenerator, treeRegistry, actionAnalyzer),
             this
         );
         
         getServer().getPluginManager().registerEvents(
-            new FeatureListener(config, dataManager, xpEngine, effectManager, toolReinforcement, xpTransfer),
+            new FeatureListener(config, dataManager, xpEngine, effectManager, gameplayFeatures),
             this
         );
         
@@ -218,6 +215,15 @@ public final class Atom extends JavaPlugin {
             
             getLogger().info("Automatic tree restructuring enabled (every 24 hours)");
         }
+        
+        long clusteringInterval = 20L * 60 * 60 * 6;
+        getServer().getGlobalRegionScheduler().runAtFixedRate(this, task -> {
+            if (dataManager.getCacheSize() >= 7) {
+                dynamicTreeManager.runSpecializationClustering();
+            }
+        }, clusteringInterval, clusteringInterval);
+        
+        getLogger().info("Specialization clustering enabled (every 6 hours)");
 
         getLogger().info("Background tasks started");
     }
@@ -230,7 +236,7 @@ public final class Atom extends JavaPlugin {
         return dataManager;
     }
 
-    public SkillTreeRegistry getTreeRegistry() {
+    public Registry getTreeRegistry() {
         return treeRegistry;
     }
 
@@ -238,32 +244,24 @@ public final class Atom extends JavaPlugin {
         return xpEngine;
     }
 
-    public StorageProvider getStorage() {
+    public Storage.Provider getStorage() {
         return storage;
     }
     
     public EffectManager getEffectManager() {
         return effectManager;
     }
-    
-    public MilestoneManager getMilestoneManager() {
-        return milestoneManager;
-    }
-    
+
     public AdvancementGenerator getAdvancementGenerator() {
         return advancementGenerator;
     }
     
-    public org.shotrush.atom.tree.MultiTreeAggregator getMultiTreeAggregator() {
+    public org.shotrush.atom.tree.Trees.Aggregator getMultiTreeAggregator() {
         return multiTreeAggregator;
     }
     
-    public ToolReinforcement getToolReinforcement() {
-        return toolReinforcement;
-    }
-    
-    public XpTransfer getXpTransfer() {
-        return xpTransfer;
+    public org.shotrush.atom.features.GameplayFeatures getGameplayFeatures() {
+        return gameplayFeatures;
     }
     
     public org.shotrush.atom.ml.DynamicTreeManager getDynamicTreeManager() {
@@ -276,5 +274,13 @@ public final class Atom extends JavaPlugin {
     
     public org.shotrush.atom.storage.TreeStorage getTreeStorage() {
         return treeStorage;
+    }
+    
+    public org.shotrush.atom.ml.SpecializationClusterer getSpecializationClusterer() {
+        return specializationClusterer;
+    }
+    
+    public org.shotrush.atom.ml.ActionAnalyzer getActionAnalyzer() {
+        return actionAnalyzer;
     }
 }

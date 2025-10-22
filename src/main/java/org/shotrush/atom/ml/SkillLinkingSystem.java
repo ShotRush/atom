@@ -4,7 +4,7 @@ import org.bukkit.plugin.Plugin;
 import org.shotrush.atom.advancement.AdvancementGenerator;
 import org.shotrush.atom.model.PlayerSkillData;
 import org.shotrush.atom.model.SkillNode;
-import org.shotrush.atom.tree.SkillTreeRegistry;
+import org.shotrush.atom.tree.Trees.Registry;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -17,12 +17,12 @@ public final class SkillLinkingSystem {
     private static final double MASTERY_THRESHOLD = 0.95; 
     
     private final Plugin plugin;
-    private final SkillTreeRegistry treeRegistry;
+    private final Registry treeRegistry;
     private final AdvancementGenerator advancementGenerator;
     private final Map<UUID, List<SkillLink>> playerLinks;
     private final Map<String, SkillNode> generatedLinkNodes;
     
-    public SkillLinkingSystem(Plugin plugin, SkillTreeRegistry treeRegistry, AdvancementGenerator advancementGenerator) {
+    public SkillLinkingSystem(Plugin plugin, Registry treeRegistry, AdvancementGenerator advancementGenerator) {
         this.plugin = plugin;
         this.treeRegistry = treeRegistry;
         this.advancementGenerator = advancementGenerator;

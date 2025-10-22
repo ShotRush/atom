@@ -1,7 +1,7 @@
 package org.shotrush.atom.manager;
 
 import org.shotrush.atom.model.PlayerSkillData;
-import org.shotrush.atom.storage.StorageProvider;
+import org.shotrush.atom.storage.Storage;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -9,10 +9,10 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public final class PlayerDataManager {
     
-    private final StorageProvider storage;
+    private final Storage.Provider storage;
     private final Map<UUID, PlayerSkillData> cache;
     
-    public PlayerDataManager(StorageProvider storage) {
+    public PlayerDataManager(Storage.Provider storage) {
         this.storage = Objects.requireNonNull(storage, "storage cannot be null");
         this.cache = new ConcurrentHashMap<>();
     }

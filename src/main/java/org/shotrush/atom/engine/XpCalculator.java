@@ -2,7 +2,7 @@ package org.shotrush.atom.engine;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import org.shotrush.atom.model.EffectiveXp;
+import org.shotrush.atom.model.Models.EffectiveXp;
 import org.shotrush.atom.model.PlayerSkillData;
 import org.shotrush.atom.model.SkillNode;
 

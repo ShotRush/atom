@@ -3,7 +3,6 @@ package org.shotrush.atom.listener;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.data.Ageable;
-import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -20,7 +19,6 @@ import org.shotrush.atom.detection.CraftDetection;
 import org.shotrush.atom.effects.EffectManager;
 import org.shotrush.atom.engine.XpEngine;
 import org.shotrush.atom.manager.PlayerDataManager;
-import org.shotrush.atom.milestone.MilestoneManager;
 import org.shotrush.atom.model.PlayerSkillData;
 
 import java.util.Objects;
@@ -32,26 +30,26 @@ public final class SkillEventListener implements Listener {
     private final PlayerDataManager dataManager;
     private final XpEngine xpEngine;
     private final EffectManager effectManager;
-    private final MilestoneManager milestoneManager;
     private final org.shotrush.atom.advancement.AdvancementGenerator advancementGenerator;
-    private final org.shotrush.atom.tree.SkillTreeRegistry treeRegistry;
+    private final org.shotrush.atom.tree.Trees.Registry treeRegistry;
+    private final org.shotrush.atom.ml.ActionAnalyzer actionAnalyzer;
     
     public SkillEventListener(
         AtomConfig config,
         PlayerDataManager dataManager, 
         XpEngine xpEngine,
         EffectManager effectManager,
-        MilestoneManager milestoneManager,
         org.shotrush.atom.advancement.AdvancementGenerator advancementGenerator,
-        org.shotrush.atom.tree.SkillTreeRegistry treeRegistry
+        org.shotrush.atom.tree.Trees.Registry treeRegistry,
+        org.shotrush.atom.ml.ActionAnalyzer actionAnalyzer
     ) {
         this.config = Objects.requireNonNull(config);
         this.dataManager = Objects.requireNonNull(dataManager);
         this.xpEngine = Objects.requireNonNull(xpEngine);
         this.effectManager = Objects.requireNonNull(effectManager);
-        this.milestoneManager = Objects.requireNonNull(milestoneManager);
         this.advancementGenerator = Objects.requireNonNull(advancementGenerator);
         this.treeRegistry = Objects.requireNonNull(treeRegistry);
+        this.actionAnalyzer = Objects.requireNonNull(actionAnalyzer);
     }
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
@@ -63,51 +61,33 @@ public final class SkillEventListener implements Listener {
         if (dataOpt.isEmpty()) return;
         
         PlayerSkillData data = dataOpt.get();
+
+        String context = org.shotrush.atom.ml.ActionAnalyzer.materialToContext(type);
+        org.shotrush.atom.ml.ActionAnalyzer.ActionType actionType = isOre(type) ? 
+            org.shotrush.atom.ml.ActionAnalyzer.ActionType.MINE_BLOCK : 
+            org.shotrush.atom.ml.ActionAnalyzer.ActionType.BREAK_BLOCK;
         
-        handleMining(data, type);
-        handleCropHarvest(data, block);
+        var result = actionAnalyzer.recordAction(player.getUniqueId(), actionType, context);
+        xpEngine.awardXp(data, result.skillId(), result.xpAmount());
+
+        if (result.skillId().startsWith("miner") && config.enablePenalties()) {
+            effectManager.applyMiningPenalty(player, data);
+        }
+
+        if (block.getBlockData() instanceof Ageable ageable && ageable.getAge() == ageable.getMaximumAge()) {
+            var harvestResult = actionAnalyzer.recordAction(player.getUniqueId(), 
+                org.shotrush.atom.ml.ActionAnalyzer.ActionType.HARVEST_CROP, context + "_harvest");
+            xpEngine.awardXp(data, harvestResult.skillId(), harvestResult.xpAmount());
+        }
         
         for (var tree : treeRegistry.getAllTrees()) {
             advancementGenerator.updatePlayerAdvancements(player, data, tree);
         }
     }
     
-    private void handleMining(PlayerSkillData data, Material type) {
-        String skillId = switch (type) {
-            case STONE -> "miner.stone_mining.stone";
-            case ANDESITE -> "miner.stone_mining.andesite";
-            case DIORITE -> "miner.stone_mining.diorite";
-            case GRANITE -> "miner.stone_mining.granite";
-            case COAL_ORE, DEEPSLATE_COAL_ORE -> "miner.ore_mining.coal";
-            case COPPER_ORE, DEEPSLATE_COPPER_ORE -> "miner.ore_mining.copper";
-            case IRON_ORE, DEEPSLATE_IRON_ORE -> "miner.ore_mining.iron";
-            case GOLD_ORE, DEEPSLATE_GOLD_ORE -> "miner.ore_mining.gold";
-            case DIAMOND_ORE, DEEPSLATE_DIAMOND_ORE -> "miner.ore_mining.diamond";
-            default -> null;
-        };
-        
-        if (skillId != null) {
-            int xpAmount = config.getXpRate("mining.ore");
-            xpEngine.awardXp(data, skillId, xpAmount);
-        }
-    }
-    
-    private void handleCropHarvest(PlayerSkillData data, Block block) {
-        if (!(block.getBlockData() instanceof Ageable ageable)) return;
-        if (ageable.getAge() != ageable.getMaximumAge()) return;
-        
-        String skillId = switch (block.getType()) {
-            case WHEAT -> "farmer.crop_farming.wheat.harvest";
-            case CARROTS -> "farmer.crop_farming.carrots.harvest";
-            case POTATOES -> "farmer.crop_farming.potatoes.harvest";
-            case BEETROOTS -> "farmer.crop_farming.beetroot.harvest";
-            default -> null;
-        };
-        
-        if (skillId != null) {
-            int xpAmount = config.getXpRate("farming.harvest");
-            xpEngine.awardXp(data, skillId, xpAmount);
-        }
+    private boolean isOre(Material type) {
+        String name = type.name();
+        return name.contains("_ORE") || name.equals("ANCIENT_DEBRIS");
     }
     
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -120,44 +100,22 @@ public final class SkillEventListener implements Listener {
         
         PlayerSkillData data = dataOpt.get();
         
-        String skillId = switch (type) {
-            case DIRT, GRASS_BLOCK -> "builder.basic_building.place_dirt";
-            case OAK_LOG, SPRUCE_LOG, BIRCH_LOG, JUNGLE_LOG, ACACIA_LOG, DARK_OAK_LOG, MANGROVE_LOG, CHERRY_LOG -> 
-                "builder.basic_building.place_wood";
-            case COBBLESTONE -> "builder.basic_building.place_cobblestone";
-            case OAK_PLANKS, SPRUCE_PLANKS, BIRCH_PLANKS, JUNGLE_PLANKS, ACACIA_PLANKS, DARK_OAK_PLANKS, MANGROVE_PLANKS, CHERRY_PLANKS -> 
-                "builder.basic_building.place_planks";
-            case STONE_BRICKS -> "builder.advanced_building.place_stone_bricks";
-            case QUARTZ_BLOCK -> "builder.advanced_building.place_quartz";
-            case GLASS -> "builder.advanced_building.place_glass";
-            default -> null;
-        };
+        String context = org.shotrush.atom.ml.ActionAnalyzer.materialToContext(type);
+        org.shotrush.atom.ml.ActionAnalyzer.ActionType actionType = isCrop(type) ?
+            org.shotrush.atom.ml.ActionAnalyzer.ActionType.PLANT_CROP :
+            org.shotrush.atom.ml.ActionAnalyzer.ActionType.PLACE_BLOCK;
         
-        if (skillId != null) {
-            int xpAmount = config.getXpRate("building.basic");
-            xpEngine.awardXp(data, skillId, xpAmount);
-        }
-        
-        handleCropPlanting(data, type);
+        var result = actionAnalyzer.recordAction(player.getUniqueId(), actionType, context);
+        xpEngine.awardXp(data, result.skillId(), result.xpAmount());
         
         for (var tree : treeRegistry.getAllTrees()) {
             advancementGenerator.updatePlayerAdvancements(player, data, tree);
         }
     }
     
-    private void handleCropPlanting(PlayerSkillData data, Material type) {
-        String skillId = switch (type) {
-            case WHEAT -> "farmer.crop_farming.wheat.plant";
-            case CARROTS -> "farmer.crop_farming.carrots.plant";
-            case POTATOES -> "farmer.crop_farming.potatoes.plant";
-            case BEETROOTS -> "farmer.crop_farming.beetroot.plant";
-            default -> null;
-        };
-        
-        if (skillId != null) {
-            int xpAmount = config.getXpRate("farming.plant");
-            xpEngine.awardXp(data, skillId, xpAmount);
-        }
+    private boolean isCrop(Material type) {
+        return type == Material.WHEAT || type == Material.CARROTS || 
+               type == Material.POTATOES || type == Material.BEETROOTS;
     }
     
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -168,19 +126,11 @@ public final class SkillEventListener implements Listener {
         if (dataOpt.isEmpty()) return;
         
         PlayerSkillData data = dataOpt.get();
-        
-        String skillId = switch (event.getEntityType()) {
-            case ZOMBIE -> "guardsman.combat.kill_zombie";
-            case SKELETON -> "guardsman.combat.kill_skeleton";
-            case SPIDER -> "guardsman.combat.kill_spider";
-            case CREEPER -> "guardsman.combat.kill_creeper";
-            default -> null;
-        };
-        
-        if (skillId != null) {
-            int xpAmount = config.getXpRate("combat.kill");
-            xpEngine.awardXp(data, skillId, xpAmount);
-        }
+
+        String context = org.shotrush.atom.ml.ActionAnalyzer.entityToContext(event.getEntityType());
+        var result = actionAnalyzer.recordAction(player.getUniqueId(), 
+            org.shotrush.atom.ml.ActionAnalyzer.ActionType.KILL_MOB, context);
+        xpEngine.awardXp(data, result.skillId(), result.xpAmount());
         
         for (var tree : treeRegistry.getAllTrees()) {
             advancementGenerator.updatePlayerAdvancements(player, data, tree);
@@ -196,18 +146,10 @@ public final class SkillEventListener implements Listener {
         
         PlayerSkillData data = dataOpt.get();
         
-        String skillId = switch (event.getEntityType()) {
-            case COW -> "farmer.animal_husbandry.breed_cows";
-            case SHEEP -> "farmer.animal_husbandry.breed_sheep";
-            case PIG -> "farmer.animal_husbandry.breed_pigs";
-            case CHICKEN -> "farmer.animal_husbandry.breed_chickens";
-            default -> null;
-        };
-        
-        if (skillId != null) {
-            int xpAmount = config.getXpRate("farming.breed");
-            xpEngine.awardXp(data, skillId, xpAmount);
-        }
+        String context = org.shotrush.atom.ml.ActionAnalyzer.entityToContext(event.getEntityType());
+        var result = actionAnalyzer.recordAction(player.getUniqueId(), 
+            org.shotrush.atom.ml.ActionAnalyzer.ActionType.BREED_ANIMAL, context);
+        xpEngine.awardXp(data, result.skillId(), result.xpAmount());
         
         for (var tree : treeRegistry.getAllTrees()) {
             advancementGenerator.updatePlayerAdvancements(player, data, tree);
@@ -225,49 +167,19 @@ public final class SkillEventListener implements Listener {
         ItemStack result = event.getRecipe().getResult();
         Material type = result.getType();
         
-        if (!CraftDetection.canCraftSucceed(event)) {
-            return;
-        }
+        if (!CraftDetection.canCraftSucceed(event)) return;
         
         int craftedAmount = CraftDetection.calculateCraftedAmount(event);
-        
-        if (craftedAmount <= 0) {
-            return;
-        }
-        
-        String skillId = getCraftingSkillId(type);
-        
-        if (skillId != null) {
-            String xpRateKey = skillId.contains("tool_crafting") ? "crafting.tool" : "crafting.armor";
-            int xpAmount = config.getXpRate(xpRateKey) * craftedAmount;
-            xpEngine.awardXp(data, skillId, xpAmount);
-        }
+        if (craftedAmount <= 0) return;
+
+        String context = org.shotrush.atom.ml.ActionAnalyzer.materialToContext(type);
+        var result2 = actionAnalyzer.recordAction(player.getUniqueId(), 
+            org.shotrush.atom.ml.ActionAnalyzer.ActionType.CRAFT_ITEM, context);
+        xpEngine.awardXp(data, result2.skillId(), result2.xpAmount() * craftedAmount);
         
         for (var tree : treeRegistry.getAllTrees()) {
             advancementGenerator.updatePlayerAdvancements(player, data, tree);
         }
-    }
-    
-    private String getCraftingSkillId(Material type) {
-        return switch (type) {
-            case WOODEN_PICKAXE, STONE_PICKAXE, IRON_PICKAXE, GOLDEN_PICKAXE, DIAMOND_PICKAXE, NETHERITE_PICKAXE -> 
-                "blacksmith.tool_crafting.pickaxes";
-            case WOODEN_AXE, STONE_AXE, IRON_AXE, GOLDEN_AXE, DIAMOND_AXE, NETHERITE_AXE -> 
-                "blacksmith.tool_crafting.axes";
-            case WOODEN_SHOVEL, STONE_SHOVEL, IRON_SHOVEL, GOLDEN_SHOVEL, DIAMOND_SHOVEL, NETHERITE_SHOVEL -> 
-                "blacksmith.tool_crafting.shovels";
-            case WOODEN_HOE, STONE_HOE, IRON_HOE, GOLDEN_HOE, DIAMOND_HOE, NETHERITE_HOE -> 
-                "blacksmith.tool_crafting.hoes";
-            case LEATHER_HELMET, CHAINMAIL_HELMET, IRON_HELMET, GOLDEN_HELMET, DIAMOND_HELMET, NETHERITE_HELMET -> 
-                "blacksmith.armor_crafting.helmets";
-            case LEATHER_CHESTPLATE, CHAINMAIL_CHESTPLATE, IRON_CHESTPLATE, GOLDEN_CHESTPLATE, DIAMOND_CHESTPLATE, NETHERITE_CHESTPLATE -> 
-                "blacksmith.armor_crafting.chestplates";
-            case LEATHER_LEGGINGS, CHAINMAIL_LEGGINGS, IRON_LEGGINGS, GOLDEN_LEGGINGS, DIAMOND_LEGGINGS, NETHERITE_LEGGINGS -> 
-                "blacksmith.armor_crafting.leggings";
-            case LEATHER_BOOTS, CHAINMAIL_BOOTS, IRON_BOOTS, GOLDEN_BOOTS, DIAMOND_BOOTS, NETHERITE_BOOTS -> 
-                "blacksmith.armor_crafting.boots";
-            default -> null;
-        };
     }
     
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -282,23 +194,25 @@ public final class SkillEventListener implements Listener {
         PlayerSkillData data = dataOpt.get();
         Material blockType = event.getClickedBlock().getType();
         
-        if (blockType == Material.FARMLAND && event.getItem() != null) {
-            ItemStack item = event.getItem();
-            if (item.getType() == Material.WOODEN_HOE || item.getType() == Material.STONE_HOE || 
-                item.getType() == Material.IRON_HOE || item.getType() == Material.DIAMOND_HOE || 
-                item.getType() == Material.NETHERITE_HOE) {
-                int xpAmount = config.getXpRate("farming.till");
-                xpEngine.awardXp(data, "farmer.land_management.till_soil", xpAmount);
-            }
-        }
+        if (!isInteractableBlock(blockType)) return;
         
-        if (blockType == Material.COMPOSTER) {
-            int xpAmount = config.getXpRate("farming.compost");
-            xpEngine.awardXp(data, "farmer.land_management.use_composter", xpAmount);
-        }
+        String context = org.shotrush.atom.ml.ActionAnalyzer.materialToContext(blockType);
+        org.shotrush.atom.ml.ActionAnalyzer.ActionType actionType = 
+            actionAnalyzer.inferActionTypeFromContext(context);
+        
+        var result = actionAnalyzer.recordAction(player.getUniqueId(), actionType, context);
+        xpEngine.awardXp(data, result.skillId(), result.xpAmount());
         
         for (var tree : treeRegistry.getAllTrees()) {
             advancementGenerator.updatePlayerAdvancements(player, data, tree);
         }
+    }
+    
+    private boolean isInteractableBlock(Material material) {
+        String name = material.name().toLowerCase();
+        return name.contains("table") || name.contains("furnace") || name.contains("anvil") ||
+               name.contains("grindstone") || name.contains("stonecutter") || name.contains("loom") ||
+               name.contains("enchant") || name.contains("brew") || name.contains("composter") ||
+               name.contains("farmland") || name.contains("smoker") || name.contains("blast");
     }
 }

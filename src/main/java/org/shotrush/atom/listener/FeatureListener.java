@@ -14,8 +14,7 @@ import org.shotrush.atom.config.AtomConfig;
 import org.shotrush.atom.detection.CraftDetection;
 import org.shotrush.atom.effects.EffectManager;
 import org.shotrush.atom.engine.XpEngine;
-import org.shotrush.atom.features.ToolReinforcement;
-import org.shotrush.atom.features.XpTransfer;
+import org.shotrush.atom.features.GameplayFeatures;
 import org.shotrush.atom.manager.PlayerDataManager;
 import org.shotrush.atom.model.PlayerSkillData;
 
@@ -29,8 +28,7 @@ public final class FeatureListener implements Listener {
     private final PlayerDataManager dataManager;
     private final XpEngine xpEngine;
     private final EffectManager effectManager;
-    private final ToolReinforcement toolReinforcement;
-    private final XpTransfer xpTransfer;
+    private final GameplayFeatures gameplayFeatures;
     private final Random random;
     
     public FeatureListener(
@@ -38,15 +36,13 @@ public final class FeatureListener implements Listener {
         PlayerDataManager dataManager,
         XpEngine xpEngine,
         EffectManager effectManager,
-        ToolReinforcement toolReinforcement,
-        XpTransfer xpTransfer
+        GameplayFeatures gameplayFeatures
     ) {
         this.config = Objects.requireNonNull(config);
         this.dataManager = Objects.requireNonNull(dataManager);
         this.xpEngine = Objects.requireNonNull(xpEngine);
         this.effectManager = Objects.requireNonNull(effectManager);
-        this.toolReinforcement = Objects.requireNonNull(toolReinforcement);
-        this.xpTransfer = Objects.requireNonNull(xpTransfer);
+        this.gameplayFeatures = Objects.requireNonNull(gameplayFeatures);
         this.random = new Random();
     }
     
@@ -72,7 +68,7 @@ public final class FeatureListener implements Listener {
         Player player = event.getPlayer();
         ItemStack item = event.getItem();
         
-        if (config.enableToolReinforcement() && toolReinforcement.isReinforced(item)) {
+        if (config.enableToolReinforcement() && gameplayFeatures.isReinforced(item)) {
             if (random.nextDouble() < 0.33) {
                 event.setCancelled(true);
             }
@@ -86,9 +82,10 @@ public final class FeatureListener implements Listener {
         String category = getToolCategory(item.getType());
         if (category != null) {
             double durabilityMultiplier = effectManager.getToolDurabilityMultiplier(player, category, data);
-            if (durabilityMultiplier > 1.0) {
-                int extraDamage = (int) ((durabilityMultiplier - 1.0) * event.getDamage());
-                event.setDamage(event.getDamage() + extraDamage);
+            // Novices (multiplier > 1.0): Tools break FASTER (more damage)
+            // Experts (multiplier < 1.0): Tools last LONGER (less damage)
+            if (durabilityMultiplier != 1.0) {
+                event.setDamage((int) (event.getDamage() * durabilityMultiplier));
             }
         }
     }
@@ -101,7 +98,7 @@ public final class FeatureListener implements Listener {
         
         if (config.enableToolReinforcement() && CraftDetection.isStoneToolCraft(result.getType())) {
             if (CraftDetection.hasIronInIngredients(event)) {
-                event.setCurrentItem(toolReinforcement.reinforce(result));
+                event.setCurrentItem(gameplayFeatures.reinforce(result));
             }
         }
     }
@@ -113,13 +110,13 @@ public final class FeatureListener implements Listener {
         
         if (item == null || !config.enableXpTransfer()) return;
         
-        if (xpTransfer.isXpItem(item)) {
+        if (gameplayFeatures.isXpItem(item)) {
             Optional<PlayerSkillData> dataOpt = dataManager.getCachedPlayerData(player.getUniqueId());
             if (dataOpt.isEmpty()) return;
             
             PlayerSkillData data = dataOpt.get();
-            String skillId = xpTransfer.getSkillId(item);
-            long storedXp = xpTransfer.getStoredXp(item);
+            String skillId = gameplayFeatures.getSkillId(item);
+            long storedXp = gameplayFeatures.getStoredXp(item);
             
             if (skillId != null && storedXp > 0) {
                 xpEngine.awardXp(data, skillId, storedXp);

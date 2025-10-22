@@ -1,13 +1,13 @@
 package org.shotrush.atom.ml;
 
-import org.bukkit.plugin.Plugin;
+import org.shotrush.atom.Atom;
 import org.shotrush.atom.config.TreeBuilder;
-import org.shotrush.atom.config.TreeDefinition;
+import org.shotrush.atom.model.Models.TreeDefinition;
 import org.shotrush.atom.manager.PlayerDataManager;
 import org.shotrush.atom.model.PlayerSkillData;
 import org.shotrush.atom.storage.TreeStorage;
-import org.shotrush.atom.tree.SkillTree;
-import org.shotrush.atom.tree.SkillTreeRegistry;
+import org.shotrush.atom.tree.Trees.SkillTree;
+import org.shotrush.atom.tree.Trees.Registry;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -15,26 +15,29 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public final class DynamicTreeManager {
     
-    private final Plugin plugin;
-    private final SkillTreeRegistry treeRegistry;
+    private final Atom plugin;
+    private final Registry treeRegistry;
     private final PlayerDataManager dataManager;
     private final TreeStorage treeStorage;
     private final SkillTreeGenerator treeGenerator;
+    private final SpecializationClusterer clusterer;
     private final Map<String, TreeDefinition> dynamicTreeCache;
     private final Map<String, Map<String, SkillTreeGenerator.ActionFrequency>> actionDataCache;
     private final Map<String, Long> lastGenerationTime;
     
     public DynamicTreeManager(
-        Plugin plugin,
-        SkillTreeRegistry treeRegistry,
+        Atom plugin,
+        Registry treeRegistry,
         PlayerDataManager dataManager,
-        TreeStorage treeStorage
+        TreeStorage treeStorage,
+        SpecializationClusterer clusterer
     ) {
         this.plugin = plugin;
         this.treeRegistry = treeRegistry;
         this.dataManager = dataManager;
         this.treeStorage = treeStorage;
-        this.treeGenerator = new SkillTreeGenerator(3, 0.7);
+        this.clusterer = clusterer;
+        this.treeGenerator = new SkillTreeGenerator(1, 0.3);
         this.dynamicTreeCache = new ConcurrentHashMap<>();
         this.actionDataCache = new ConcurrentHashMap<>();
         this.lastGenerationTime = new ConcurrentHashMap<>();
@@ -70,7 +73,7 @@ public final class DynamicTreeManager {
         List<TreeDefinition.NodeDefinition> branches = treeGenerator.generateBranches(
             rootClusterId,
             actionData,
-            3
+            5
         );
         
         if (branches.isEmpty()) {
@@ -92,14 +95,21 @@ public final class DynamicTreeManager {
     private Map<String, SkillTreeGenerator.ActionFrequency> collectActionData(String rootClusterId) {
         Map<String, SkillTreeGenerator.ActionFrequency> aggregatedData = new HashMap<>();
         
+        int playerCount = 0;
+        int skillsFound = 0;
+        
         for (PlayerSkillData playerData : dataManager.getAllCachedData()) {
+            playerCount++;
             Map<String, Long> skills = playerData.getAllIntrinsicXp();
             
             for (Map.Entry<String, Long> entry : skills.entrySet()) {
                 String skillId = entry.getKey();
                 Long xp = entry.getValue();
                 
-                if (skillId.startsWith(rootClusterId + ".")) {
+                if (xp <= 0) continue;
+                
+                if (skillId.startsWith(rootClusterId + ".") || skillId.equals(rootClusterId)) {
+                    skillsFound++;
                     String actionId = extractActionId(skillId);
                     String materialType = extractMaterialType(skillId);
                     
@@ -124,6 +134,9 @@ public final class DynamicTreeManager {
                 }
             }
         }
+        
+        plugin.getLogger().info("[ML Generate] Scanned " + playerCount + " players, found " + 
+            skillsFound + " skills for " + rootClusterId + ", created " + aggregatedData.size() + " action frequencies");
         
         return aggregatedData;
     }
@@ -150,9 +163,51 @@ public final class DynamicTreeManager {
         }
         
         SkillTree mainTree = mainTreeOpt.get();
+        Optional<org.shotrush.atom.model.SkillNode> rootNodeOpt = mainTree.getNode(rootClusterId);
         
-        plugin.getLogger().info("Dynamic tree update for " + rootClusterId + " would add " + 
-            branches.size() + " branches (implementation pending)");
+        if (rootNodeOpt.isEmpty()) {
+            plugin.getLogger().warning("Root node not found: " + rootClusterId);
+            return;
+        }
+        
+        org.shotrush.atom.model.SkillNode rootNode = rootNodeOpt.get();
+        int created = 0;
+        int skipped = 0;
+        
+        for (TreeDefinition.NodeDefinition branchDef : branches) {
+            String branchId = rootClusterId + "." + branchDef.id();
+            
+            if (mainTree.getNode(branchId).isPresent()) {
+                skipped++;
+                continue;
+            }
+            
+            org.shotrush.atom.model.SkillNode newBranch = org.shotrush.atom.model.SkillNode.builder()
+                .id(branchId)
+                .displayName(branchDef.displayName())
+                .parent(rootNode)
+                .maxXp(branchDef.maxXp())
+                .type(org.shotrush.atom.model.SkillNode.NodeType.BRANCH)
+                .build();
+            
+            rootNode.addChild(newBranch);
+            
+            if (plugin.getAdvancementGenerator() != null) {
+                plugin.getAdvancementGenerator().generateNodeAdvancement(newBranch, rootClusterId);
+            }
+            
+            created++;
+            plugin.getLogger().info("  Created branch: " + branchId + " (" + branchDef.displayName() + ")");
+        }
+        
+        if (created > 0) {
+            plugin.getLogger().info("Dynamic tree update for " + rootClusterId + ": created " + 
+                created + " branches, skipped " + skipped + " existing");
+            plugin.getLogger().info("Note: Tree changes are in-memory only. Restart to persist.");
+        } else {
+            plugin.getLogger().info("Dynamic tree update for " + rootClusterId + ": all " + 
+                branches.size() + " branches already exist");
+        }
     }
     
     
@@ -324,6 +379,22 @@ public final class DynamicTreeManager {
             if (shouldRegenerateTree(clusterId)) {
                 restructureTreeBasedOnUsage(clusterId);
             }
+        }
+    }
+    
+    public void runSpecializationClustering() {
+        plugin.getLogger().info("Running k-means clustering on player specializations...");
+        clusterer.performClustering();
+        
+        List<SpecializationClusterer.Cluster> clusters = clusterer.getClusters();
+        plugin.getLogger().info("Discovered " + clusters.size() + " specialization patterns:");
+        
+        for (int i = 0; i < clusters.size(); i++) {
+            SpecializationClusterer.Cluster cluster = clusters.get(i);
+            plugin.getLogger().info("  [" + i + "] " + cluster.getLabel() + 
+                " (" + cluster.getMembers().size() + " players)");
+            plugin.getLogger().info("      Top skills: " + String.join(", ", 
+                cluster.getTopSkills().stream().limit(3).toList()));
         }
     }
 }

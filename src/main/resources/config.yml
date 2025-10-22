@@ -9,7 +9,7 @@ features:
   feedback: true
   tool-reinforcement: true
   xp-transfer: true
-  dynamic-tree-generation: false  # Enable ML-based dynamic tree generation (experimental)
+  dynamic-tree-generation: true  # Enable ML-based dynamic tree generation (experimental)
 
 parent-xp:
   multiplier: 1.0  # Root gets 100% of XP first
