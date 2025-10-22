@@ -7,30 +7,33 @@ import org.bukkit.advancement.Advancement;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.shotrush.atom.engine.XpEngine;
+import org.shotrush.atom.ml.RecipeProgressionML;
 import org.shotrush.atom.model.Models.EffectiveXp;
 import org.shotrush.atom.model.Models.Milestone;
 import org.shotrush.atom.model.PlayerSkillData;
 import org.shotrush.atom.model.SkillNode;
 import org.shotrush.atom.tree.Trees.SkillTree;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 public final class AdvancementGenerator {
     
     private final Plugin plugin;
     private final XpEngine xpEngine;
     private final Map<String, NamespacedKey> skillAdvancementKeys;
+    private final Map<Material, NamespacedKey> recipeAdvancementKeys;
     private final org.shotrush.atom.config.AtomConfig config;
     private final Map<String, Set<String>> playerGrantedAdvancements;
+    private final RecipeProgressionML recipeML;
     
     public AdvancementGenerator(Plugin plugin, XpEngine xpEngine, org.shotrush.atom.config.AtomConfig config) {
         this.plugin = plugin;
         this.xpEngine = xpEngine;
         this.skillAdvancementKeys = new HashMap<>();
+        this.recipeAdvancementKeys = new HashMap<>();
         this.config = config;
         this.playerGrantedAdvancements = new java.util.concurrent.ConcurrentHashMap<>();
+        this.recipeML = new RecipeProgressionML(plugin);
         
         createDatapackStructure();
     }
@@ -102,11 +105,23 @@ public final class AdvancementGenerator {
             String datapackJson = json.replace("\"id\":", "\"item\":");
             saveAdvancementToDisk(key, datapackJson);
             
-            Bukkit.getUnsafe().loadAdvancement(key, json);
-            plugin.getLogger().info("Loaded advancement: " + key);
+            try {
+                Bukkit.getUnsafe().loadAdvancement(key, json);
+            } catch (IllegalArgumentException e) {
+                if (!e.getMessage().contains("Duplicate")) {
+                    throw e;
+                }
+            }
         } catch (Exception e) {
             plugin.getLogger().warning("Failed to load advancement " + key + ": " + e.getMessage());
         }
+    }
+    
+    private java.nio.file.Path getAdvancementFilePath(NamespacedKey key) {
+        java.nio.file.Path advancementsDir = getDatapackPath()
+            .resolve("data/atom/advancements");
+        String path = key.getKey().replace("/", java.io.File.separator);
+        return advancementsDir.resolve(path + ".json");
     }
     
     private void saveAdvancementToDisk(NamespacedKey key, String json) {
@@ -153,7 +168,7 @@ public final class AdvancementGenerator {
         json.append("    },\n");
         
         if (isRoot) {
-            json.append("    \"background\": \"minecraft:textures/block/deepslate.png\",\n");
+            json.append("    \"background\": \"minecraft:block/stone_bricks\",\n");
         }
         
         json.append("    \"frame\": \"").append(frame).append("\",\n");
@@ -370,6 +385,186 @@ public final class AdvancementGenerator {
                 advancementProgress.awardCriteria("trigger");
                 granted.add(skillId);
             }
+        }
+    }
+
+    public void generateRecipeAdvancements() {
+        plugin.getLogger().info("[RecipeAdvancements] Starting recipe advancement generation...");
+        
+        NamespacedKey craftingRoot = new NamespacedKey(plugin, "recipes/root");
+        String rootJson = buildAdvancementJson(
+            "minecraft:crafting_table",
+            "§6§lCrafting Progression",
+            "Unlock recipes as you master each tier",
+            "challenge",
+            null,
+            true,
+            true,
+            true
+        );
+        loadAdvancement(craftingRoot, rootJson);
+        
+        String[] categories = {"wood_crafting", "stone_crafting", "iron_crafting", 
+                               "diamond_crafting", "netherite_crafting"};
+        
+        for (String category : categories) {
+            List<Material> recipes = recipeML.getRecipesByCategory(category);
+            plugin.getLogger().info("[RecipeAdvancements] Category '" + category + "' has " + recipes.size() + " recipes");
+            
+            if (recipes.isEmpty()) continue;
+            
+            String categoryKey = "recipes/" + category;
+            NamespacedKey categoryRootKey = new NamespacedKey(plugin, categoryKey);
+            
+            Material icon = getCategoryIcon(category, recipes);
+            String title = formatCategoryTitle(category);
+            String description = getCategoryDescription(category);
+            
+            String json = buildAdvancementJson(
+                icon.getKey().toString(),
+                title,
+                description,
+                "goal",
+                "atom:recipes/root",
+                true,
+                true,
+                false
+            );
+            
+            loadAdvancement(categoryRootKey, json);
+            
+            Material previousRecipe = null;
+            for (Material recipe : recipes) {
+                generateRecipeAdvancement(recipe, previousRecipe, categoryKey);
+                previousRecipe = recipe;
+            }
+        }
+        
+        plugin.getLogger().info("Generated " + recipeAdvancementKeys.size() + " recipe advancements using ML");
+    }
+    
+    
+    private void generateRecipeAdvancement(Material recipe, Material prerequisite, String parentCategory) {
+        String recipePath = "recipes/" + recipe.name().toLowerCase();
+        NamespacedKey key = new NamespacedKey(plugin, recipePath);
+        
+        String title = formatRecipeName(recipe);
+        String description = generateRecipeDescription(recipe);
+        String parent = prerequisite != null 
+            ? "atom:recipes/" + prerequisite.name().toLowerCase()
+            : "atom:" + parentCategory;
+        
+        String json = buildAdvancementJson(
+            recipe.getKey().toString(),
+            title,
+            description,
+            "task",
+            parent,
+            true,
+            false
+        );
+        
+        loadAdvancement(key, json);
+        recipeAdvancementKeys.put(recipe, key);
+    }
+    
+    
+    public void grantRecipeAdvancement(Player player, Material recipe) {
+        NamespacedKey key = recipeAdvancementKeys.get(recipe);
+        if (key == null) {
+            System.out.println("[RecipeAdvancement] No advancement key for recipe: " + recipe.name());
+            return;
+        }
+        
+        Advancement advancement = Bukkit.getAdvancement(key);
+        if (advancement == null) {
+            System.out.println("[RecipeAdvancement] Advancement not found for key: " + key);
+            return;
+        }
+        
+        var progress = player.getAdvancementProgress(advancement);
+        if (!progress.isDone()) {
+            System.out.println("[RecipeAdvancement] Granting advancement for " + recipe.name() + " to " + player.getName());
+            progress.awardCriteria("trigger");
+            List<RecipeProgressionML.RecipeUnlock> nextRecipes = recipeML.getNextRecipes(recipe);
+            if (!nextRecipes.isEmpty()) {
+                player.sendMessage(net.kyori.adventure.text.Component.text(
+                    "New recipes unlocked! Check your advancements.",
+                    net.kyori.adventure.text.format.NamedTextColor.GOLD
+                ));
+            }
+        } else {
+            System.out.println("[RecipeAdvancement] Advancement already granted for " + recipe.name());
+        }
+    }
+    
+    private Material getCategoryIcon(String category, List<Material> recipes) {
+        Map<String, Material> icons = Map.of(
+            "wood_crafting", Material.WOODEN_PICKAXE,
+            "stone_crafting", Material.STONE_PICKAXE,
+            "iron_crafting", Material.IRON_PICKAXE,
+            "diamond_crafting", Material.DIAMOND_PICKAXE,
+            "netherite_crafting", Material.NETHERITE_PICKAXE
+        );
+        return icons.getOrDefault(category, recipes.get(0));
+    }
+    
+    private String getCategoryDescription(String category) {
+        Map<String, String> descriptions = Map.of(
+            "wood_crafting", "Master basic wooden tools and items",
+            "stone_crafting", "Progress to stone tier equipment",
+            "iron_crafting", "Unlock iron tools and advanced crafting",
+            "diamond_crafting", "Craft powerful diamond equipment",
+            "netherite_crafting", "Master the ultimate netherite gear"
+        );
+        return descriptions.getOrDefault(category, "Unlock " + category.replace("_", " "));
+    }
+    
+    private String formatCategoryTitle(String category) {
+        Map<String, String> titles = Map.of(
+            "wood_crafting", "§eWooden Crafting",
+            "stone_crafting", "§7Stone Crafting",
+            "iron_crafting", "§fIron Crafting",
+            "diamond_crafting", "§bDiamond Crafting",
+            "netherite_crafting", "§5Netherite Crafting"
+        );
+        
+        if (titles.containsKey(category)) {
+            return titles.get(category);
+        }
+        
+        String[] parts = category.split("_");
+        StringBuilder title = new StringBuilder();
+        for (String part : parts) {
+            if (!title.isEmpty()) title.append(" ");
+            title.append(part.substring(0, 1).toUpperCase()).append(part.substring(1));
+        }
+        return "§6" + title;
+    }
+    
+    private String formatRecipeName(Material material) {
+        String name = material.name().toLowerCase().replace("_", " ");
+        String[] words = name.split(" ");
+        StringBuilder result = new StringBuilder();
+        for (String word : words) {
+            if (!result.isEmpty()) result.append(" ");
+            result.append(word.substring(0, 1).toUpperCase()).append(word.substring(1));
+        }
+        return "§a" + result;
+    }
+    
+    private String generateRecipeDescription(Material recipe) {
+        double complexity = recipeML.getComplexity(recipe);
+        Set<Material> prereqs = recipeML.getPrerequisites(recipe);
+        
+        if (prereqs.isEmpty()) {
+            return "Basic recipe";
+        } else if (complexity < 0.3) {
+            return "Early game recipe";
+        } else if (complexity < 0.6) {
+            return "Intermediate recipe";
+        } else {
+            return "Advanced recipe";
         }
     }
 }

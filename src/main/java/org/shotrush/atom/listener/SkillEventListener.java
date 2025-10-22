@@ -176,6 +176,8 @@ public final class SkillEventListener implements Listener {
         var result2 = actionAnalyzer.recordAction(player.getUniqueId(), 
             org.shotrush.atom.ml.ActionAnalyzer.ActionType.CRAFT_ITEM, context);
         xpEngine.awardXp(data, result2.skillId(), result2.xpAmount() * craftedAmount);
+
+        advancementGenerator.grantRecipeAdvancement(player, type);
         
         for (var tree : treeRegistry.getAllTrees()) {
             advancementGenerator.updatePlayerAdvancements(player, data, tree);

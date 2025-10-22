@@ -138,10 +138,11 @@ public final class Atom extends JavaPlugin {
         for (SkillTree tree : treeRegistry.getAllTrees()) {
             advancementGenerator.generateAdvancementsForTree(tree);
         }
-        
+
+        advancementGenerator.generateRecipeAdvancements();
         
         getLogger().info("Managers initialized");
-        getLogger().info("Advancements loaded");
+        getLogger().info("Advancements loaded (including ML-generated recipe advancements)");
     }
     
     private void initializeFeatures() {

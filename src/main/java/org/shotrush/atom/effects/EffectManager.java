@@ -129,7 +129,6 @@ public final class EffectManager {
                 false
             ));
         }
-        // Experts (score >= 0.3): no penalty
     }
     
     public UnlockSystem getUnlockSystem() {

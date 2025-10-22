@@ -43,12 +43,16 @@ public final class RecipeManager implements Listener {
         
         Optional<PlayerSkillData> dataOpt = dataManager.getCachedPlayerData(player.getUniqueId());
         if (dataOpt.isEmpty()) {
-            event.getInventory().setResult(null);System.out.println("[Recipe Block] No player data for " + player.getName());
+            event.getInventory().setResult(null);
+            System.out.println("[Recipe Block] No player data for " + player.getName());
             return;
         }
         
         Map<String, SkillNode> allNodes = buildNodeIndex();
         PlayerSkillData data = dataOpt.get();
+        
+        Material result = recipe.getResult().getType();
+        System.out.println("[Recipe Check] Player " + player.getName() + " attempting to craft " + result.name());
         
         boolean canCraft = checkRecipeUnlock(player, data, allNodes, recipe);
         
@@ -58,10 +62,39 @@ public final class RecipeManager implements Listener {
                 " (insufficient skill progression)");
             
             event.getInventory().setResult(null);
-            player.sendActionBar(net.kyori.adventure.text.Component.text(
-                "Insufficient skill",
-                net.kyori.adventure.text.format.NamedTextColor.GRAY
-            ));
+            String skillId = getSkillIdForRecipe(result);
+            System.out.println("[Recipe Block] Skill ID for " + result.name() + ": " + skillId);
+            
+            if (skillId != null) {
+                SkillNode node = allNodes.get(skillId);
+                System.out.println("[Recipe Block] Node found: " + (node != null));
+                
+                if (node != null) {
+                    long intrinsicXp = data.getIntrinsicXp(skillId);
+                    double progress = intrinsicXp / (double) node.maxXp();
+                    double threshold = getThresholdForMaterial(result);
+                    
+                    System.out.println("[Recipe Block] Progress: " + progress + ", Threshold: " + threshold);
+                    
+                    player.sendActionBar(net.kyori.adventure.text.Component.text(
+                        String.format("Insufficient skill [%s] - Progress: %.1f%% / %.1f%% required", 
+                            skillId, progress * 100, threshold * 100),
+                        net.kyori.adventure.text.format.NamedTextColor.RED
+                    ));
+                } else {
+                    System.out.println("[Recipe Block] Node not found in index");
+                    player.sendActionBar(net.kyori.adventure.text.Component.text(
+                        "Insufficient skill [" + skillId + "] (node not found)",
+                        net.kyori.adventure.text.format.NamedTextColor.GRAY
+                    ));
+                }
+            } else {
+                System.out.println("[Recipe Block] No skill ID mapping for this recipe");
+                player.sendActionBar(net.kyori.adventure.text.Component.text(
+                    "Insufficient skill (no skill mapping for " + result.name() + ")",
+                    net.kyori.adventure.text.format.NamedTextColor.GRAY
+                ));
+            }
         } else {
             String itemName = recipe.getResult().getType().name();
             System.out.println("[Recipe Allow] " + player.getName() + " can craft " + itemName);

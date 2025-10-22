@@ -82,8 +82,6 @@ public final class FeatureListener implements Listener {
         String category = getToolCategory(item.getType());
         if (category != null) {
             double durabilityMultiplier = effectManager.getToolDurabilityMultiplier(player, category, data);
-            // Novices (multiplier > 1.0): Tools break FASTER (more damage)
-            // Experts (multiplier < 1.0): Tools last LONGER (less damage)
             if (durabilityMultiplier != 1.0) {
                 event.setDamage((int) (event.getDamage() * durabilityMultiplier));
             }
