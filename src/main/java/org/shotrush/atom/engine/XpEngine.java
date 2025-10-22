@@ -66,8 +66,7 @@ public final class XpEngine {
             calculator.invalidateCache(playerData.playerId());
             
             if (config.enableFeedback()) {
-                String displayName = formatDisplayName(skillId.substring(skillId.lastIndexOf('.') + 1));
-                showXpFeedback(playerData.playerId(), amount, displayName);
+                showXpFeedback(playerData.playerId(), amount, skillId);
             }
             return;
         }
@@ -83,7 +82,7 @@ public final class XpEngine {
         }
         
         if (config.enableFeedback()) {
-            showXpFeedback(playerData.playerId(), amount, node.displayName());
+            showXpFeedback(playerData.playerId(), amount, node.id());
         }
     }
     

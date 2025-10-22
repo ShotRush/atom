@@ -123,7 +123,7 @@ public final class Atom extends JavaPlugin {
         multiTreeAggregator = new org.shotrush.atom.tree.Trees.Aggregator(treeRegistry);
         xpEngine = new XpEngine(treeRegistry, multiTreeAggregator, config);
         effectManager = new EffectManager(this, config, xpEngine, treeRegistry, dataManager);
-        advancementGenerator = new AdvancementGenerator(this, xpEngine, config);
+        advancementGenerator = new AdvancementGenerator(this, xpEngine, config, (SQLiteStorage) storage);
         xpEngine.setAdvancementGenerator(advancementGenerator);
         
         actionAnalyzer = new org.shotrush.atom.ml.ActionAnalyzer(this);

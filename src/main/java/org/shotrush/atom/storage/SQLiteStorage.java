@@ -67,15 +67,27 @@ public final class SQLiteStorage implements Storage.Provider {
             )
         """;
         
+        String createAdvancementsTable = """
+            CREATE TABLE IF NOT EXISTS atom_advancements (
+                player_id TEXT NOT NULL,
+                advancement_key TEXT NOT NULL,
+                granted_time INTEGER NOT NULL,
+                PRIMARY KEY (player_id, advancement_key),
+                FOREIGN KEY (player_id) REFERENCES atom_players(player_id) ON DELETE CASCADE
+            )
+        """;
+        
         String createIndexes = """
             CREATE INDEX IF NOT EXISTS idx_player_modified ON atom_players(last_modified);
             CREATE INDEX IF NOT EXISTS idx_skill_lookup ON atom_skills(player_id, skill_id);
+            CREATE INDEX IF NOT EXISTS idx_advancement_lookup ON atom_advancements(player_id, advancement_key);
         """;
         
         try (Connection conn = dataSource.getConnection();
              Statement stmt = conn.createStatement()) {
             stmt.execute(createPlayersTable);
             stmt.execute(createSkillsTable);
+            stmt.execute(createAdvancementsTable);
             stmt.execute(createIndexes);
         }
     }
@@ -188,6 +200,41 @@ public final class SQLiteStorage implements Storage.Provider {
             } catch (SQLException e) {
                 throw new Storage.Exception("Failed to delete player data for " + playerId, e);
             }
+        }, executor);
+    }
+    
+    public CompletableFuture<Void> saveAdvancement(UUID playerId, String advancementKey) {
+        return CompletableFuture.runAsync(() -> {
+            try (Connection conn = dataSource.getConnection()) {
+                String query = "INSERT OR IGNORE INTO atom_advancements (player_id, advancement_key, granted_time) VALUES (?, ?, ?)";
+                try (PreparedStatement stmt = conn.prepareStatement(query)) {
+                    stmt.setString(1, playerId.toString());
+                    stmt.setString(2, advancementKey);
+                    stmt.setLong(3, System.currentTimeMillis());
+                    stmt.executeUpdate();
+                }
+            } catch (SQLException e) {
+                throw new Storage.Exception("Failed to save advancement for " + playerId, e);
+            }
+        }, executor);
+    }
+    
+    public CompletableFuture<Set<String>> loadAdvancements(UUID playerId) {
+        return CompletableFuture.supplyAsync(() -> {
+            Set<String> advancements = new HashSet<>();
+            try (Connection conn = dataSource.getConnection()) {
+                String query = "SELECT advancement_key FROM atom_advancements WHERE player_id = ?";
+                try (PreparedStatement stmt = conn.prepareStatement(query)) {
+                    stmt.setString(1, playerId.toString());
+                    ResultSet rs = stmt.executeQuery();
+                    while (rs.next()) {
+                        advancements.add(rs.getString("advancement_key"));
+                    }
+                }
+            } catch (SQLException e) {
+                throw new Storage.Exception("Failed to load advancements for " + playerId, e);
+            }
+            return advancements;
         }, executor);
     }
     

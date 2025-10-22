@@ -204,9 +204,7 @@ public final class EffectManager {
     }
     
     private String formatSkillId(String skillId) {
-        String[] parts = skillId.split("\\.");
-        String last = parts[parts.length - 1];
-        return last.substring(0, 1).toUpperCase() + last.substring(1).replace("_", " ");
+        return skillId;
     }
     
     private record SpecializationCache(

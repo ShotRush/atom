@@ -33,6 +33,8 @@ public final class PlayerConnectionListener implements Listener {
             task -> {
                 dataManager.loadPlayerData(player.getUniqueId());
                 
+                advancementGenerator.loadPlayerAdvancements(player);
+                
                 dataManager.getCachedPlayerData(player.getUniqueId()).ifPresent(data -> {
                     for (var tree : treeRegistry.getAllTrees()) {
                         advancementGenerator.updatePlayerAdvancements(player, data, tree);

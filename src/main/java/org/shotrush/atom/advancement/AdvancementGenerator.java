@@ -25,8 +25,10 @@ public final class AdvancementGenerator {
     private final org.shotrush.atom.config.AtomConfig config;
     private final Map<String, Set<String>> playerGrantedAdvancements;
     private final RecipeProgressionML recipeML;
+    private final org.shotrush.atom.storage.SQLiteStorage storage;
     
-    public AdvancementGenerator(Plugin plugin, XpEngine xpEngine, org.shotrush.atom.config.AtomConfig config) {
+    public AdvancementGenerator(Plugin plugin, XpEngine xpEngine, org.shotrush.atom.config.AtomConfig config, 
+                                org.shotrush.atom.storage.SQLiteStorage storage) {
         this.plugin = plugin;
         this.xpEngine = xpEngine;
         this.skillAdvancementKeys = new HashMap<>();
@@ -34,6 +36,7 @@ public final class AdvancementGenerator {
         this.config = config;
         this.playerGrantedAdvancements = new java.util.concurrent.ConcurrentHashMap<>();
         this.recipeML = new RecipeProgressionML(plugin);
+        this.storage = storage;
         
         createDatapackStructure();
     }
@@ -261,43 +264,23 @@ public final class AdvancementGenerator {
     }
     
     private String generateDescription(SkillNode node) {
-        int depth = node.depth();
-        
-        if (depth == 0) {
-            return node.displayName() + " Class";
-        } else if (depth == 1) {
-            return node.displayName();
-        } else if (depth == 2) {
-            return node.displayName() + " Skills";
-        } else if (depth >= 3) {
-            return "";
-        }
-        
-        return node.displayName();
+        return node.id();
     }
     
     private String formatTitle(String skillId) {
         String[] parts = skillId.split("\\.");
-        String lastPart = parts[parts.length - 1];
-        
-        StringBuilder title = new StringBuilder();
-        String[] words = lastPart.split("_");
-        for (String word : words) {
-            if (!title.isEmpty()) title.append(" ");
-            title.append(word.substring(0, 1).toUpperCase()).append(word.substring(1));
-        }
-        
         int depth = parts.length - 1;
+        
         if (depth == 0) {
-            return "§6§l" + title;
+            return "§6§l" + skillId;
         } else if (depth == 1) {
-            return "§e" + title;
+            return "§e" + skillId;
         } else if (depth == 2) {
-            return "§a" + title;
+            return "§a" + skillId;
         } else if (depth == 3) {
-            return "§b" + title;
+            return "§b" + skillId;
         } else {
-            return "§d" + title;
+            return "§d" + skillId;
         }
     }
     
@@ -336,12 +319,39 @@ public final class AdvancementGenerator {
                     String.format("%.1f%%", progress * 100) + ")");
                 advancementProgress.awardCriteria("trigger");
                 granted.add(node.id());
+                storage.saveAdvancement(player.getUniqueId(), key.toString());
             }
         }
         
         for (SkillNode child : node.children().values()) {
             updateNodeAdvancements(player, data, child);
         }
+    }
+    
+    public void loadPlayerAdvancements(Player player) {
+        storage.loadAdvancements(player.getUniqueId()).thenAccept(advancementKeys -> {
+            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                for (String keyString : advancementKeys) {
+                    try {
+                        String[] parts = keyString.split(":");
+                        if (parts.length != 2) continue;
+                        
+                        NamespacedKey key = new NamespacedKey(parts[0], parts[1]);
+                        Advancement advancement = Bukkit.getAdvancement(key);
+                        
+                        if (advancement != null) {
+                            var progress = player.getAdvancementProgress(advancement);
+                            if (!progress.isDone()) {
+                                progress.awardCriteria("trigger");
+                            }
+                        }
+                    } catch (Exception e) {
+                        plugin.getLogger().warning("Failed to restore advancement " + keyString + " for " + player.getName());
+                    }
+                }
+                plugin.getLogger().info("Restored " + advancementKeys.size() + " advancements for " + player.getName());
+            });
+        });
     }
     
     public void clearPlayerAdvancements(Player player) {
@@ -384,12 +394,12 @@ public final class AdvancementGenerator {
                     String.format("%.1f%%", progress * 100) + ")");
                 advancementProgress.awardCriteria("trigger");
                 granted.add(skillId);
+                storage.saveAdvancement(player.getUniqueId(), key.toString());
             }
         }
     }
 
     public void generateRecipeAdvancements() {
-        plugin.getLogger().info("[RecipeAdvancements] Starting recipe advancement generation...");
         
         NamespacedKey craftingRoot = new NamespacedKey(plugin, "recipes/root");
         String rootJson = buildAdvancementJson(
@@ -409,7 +419,6 @@ public final class AdvancementGenerator {
         
         for (String category : categories) {
             List<Material> recipes = recipeML.getRecipesByCategory(category);
-            plugin.getLogger().info("[RecipeAdvancements] Category '" + category + "' has " + recipes.size() + " recipes");
             
             if (recipes.isEmpty()) continue;
             
@@ -472,20 +481,18 @@ public final class AdvancementGenerator {
     public void grantRecipeAdvancement(Player player, Material recipe) {
         NamespacedKey key = recipeAdvancementKeys.get(recipe);
         if (key == null) {
-            System.out.println("[RecipeAdvancement] No advancement key for recipe: " + recipe.name());
             return;
         }
         
         Advancement advancement = Bukkit.getAdvancement(key);
         if (advancement == null) {
-            System.out.println("[RecipeAdvancement] Advancement not found for key: " + key);
             return;
         }
         
         var progress = player.getAdvancementProgress(advancement);
         if (!progress.isDone()) {
-            System.out.println("[RecipeAdvancement] Granting advancement for " + recipe.name() + " to " + player.getName());
             progress.awardCriteria("trigger");
+            storage.saveAdvancement(player.getUniqueId(), key.toString());
             List<RecipeProgressionML.RecipeUnlock> nextRecipes = recipeML.getNextRecipes(recipe);
             if (!nextRecipes.isEmpty()) {
                 player.sendMessage(net.kyori.adventure.text.Component.text(
@@ -493,8 +500,6 @@ public final class AdvancementGenerator {
                     net.kyori.adventure.text.format.NamedTextColor.GOLD
                 ));
             }
-        } else {
-            System.out.println("[RecipeAdvancement] Advancement already granted for " + recipe.name());
         }
     }
     

@@ -496,6 +496,7 @@ public final class AtomCommand extends BaseCommand {
             double accuracy = (double) correct / quizQuestions * 100;
             
             int trained = plugin.getActionAnalyzer().trainWithSyntheticData(iterations);
+            plugin.getActionAnalyzer().saveMLBrain();
             long duration = System.currentTimeMillis() - startTime;
             
             sender.sendMessage(Component.text("✓ Training complete!", NamedTextColor.GREEN));
@@ -506,6 +507,7 @@ public final class AtomCommand extends BaseCommand {
                 .append(Component.text(trained, NamedTextColor.AQUA)));
             sender.sendMessage(Component.text("  Duration: ", NamedTextColor.GRAY)
                 .append(Component.text(duration + "ms", NamedTextColor.YELLOW)));
+            sender.sendMessage(Component.text("  Model saved to disk", NamedTextColor.GRAY));
             sender.sendMessage(Component.text("  ML is now smarter!", NamedTextColor.GREEN));
         });
     }

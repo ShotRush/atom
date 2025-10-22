@@ -24,10 +24,17 @@ public final class ActionAnalyzer {
     private final int memoryCapacity;
     private int totalExamples;
     private final Path mlBrainPath;
+    private int trainingLevel;
     
     private final Map<String, String> materialTiers;
     private final Map<String, String> toolTypes;
     private final Map<String, java.util.List<String>> materialHierarchy;
+    
+    private final Map<String, Map<String, Double>> qTable;
+    private final Map<String, Integer> stateActionCounts;
+    private final double learningRate = 0.1;
+    private final double discountFactor = 0.95;
+    private final double explorationRate = 0.1;
     
     public ActionAnalyzer(org.shotrush.atom.Atom plugin) {
         this.plugin = plugin;
@@ -40,10 +47,14 @@ public final class ActionAnalyzer {
         this.categories = new ConcurrentHashMap<>();
         this.memoryCapacity = 1000;
         this.totalExamples = 0;
+        this.trainingLevel = 1;
         
         this.materialTiers = new ConcurrentHashMap<>();
         this.toolTypes = new ConcurrentHashMap<>();
         this.materialHierarchy = new ConcurrentHashMap<>();
+        
+        this.qTable = new ConcurrentHashMap<>();
+        this.stateActionCounts = new ConcurrentHashMap<>();
         
         buildDynamicHierarchies();
         
@@ -55,10 +66,79 @@ public final class ActionAnalyzer {
             plugin.getLogger().warning("Failed to create ML brain directory: " + e.getMessage());
         }
         
+        Path brainFile = mlBrainPath.resolve("classifier.dat");
+        boolean modelExists = Files.exists(brainFile);
+        
+        plugin.getLogger().info("[ML] Checking for existing model at: " + brainFile);
+        plugin.getLogger().info("[ML] Model exists: " + modelExists);
+        
         if (!loadMLBrain()) {
+            plugin.getLogger().info("[ML] No trained model found. Training new model...");
             initializeMLCategories();
-            saveMLBrain();
+            autoTrainUntilAccurate();
+        } else {
+            plugin.getLogger().info("[ML] Loaded trained model from disk (Level " + trainingLevel + ")");
+            
+            int quizSize = 500 * trainingLevel;
+            int correct = trainWithQuiz(quizSize);
+            double accuracy = (double) correct / quizSize * 100;
+            
+            plugin.getLogger().info(String.format("[ML] Verifying model accuracy: %.1f%%", accuracy));
+            
+            if (accuracy < 96.0) {
+                plugin.getLogger().warning(String.format("[ML] Model accuracy below 96%% (%.1f%%), retraining...", accuracy));
+                autoTrainUntilAccurate();
+            } else {
+                plugin.getLogger().info("[ML] Model accuracy verified. Ready to use.");
+            }
         }
+    }
+    
+    private void autoTrainUntilAccurate() {
+        int currentIteration = 0;
+        double targetAccuracy = 96.0;
+        double currentAccuracy = 0.0;
+        
+        int baseQuizSize = 200 * trainingLevel;
+        int baseSyntheticSize = 20000 * trainingLevel;
+        
+        plugin.getLogger().info(String.format("[ML] Starting training (Level %d: %d quiz, %d synthetic per iteration)", 
+            trainingLevel, baseQuizSize, baseSyntheticSize));
+        plugin.getLogger().warning("[ML] Server startup will block until 96% accuracy is reached!");
+        
+        trainWithSyntheticData(baseSyntheticSize * 2);
+        
+        while (currentAccuracy < targetAccuracy) {
+            int syntheticExamples = baseSyntheticSize + (baseSyntheticSize * currentIteration / 2);
+            trainWithSyntheticData(syntheticExamples);
+            
+            int quizSize = baseQuizSize;
+            TrainingResult result = trainWithQuizAndGetRLAccuracy(quizSize);
+            currentAccuracy = result.naiveBayesAccuracy;
+            double rlAccuracy = result.rlAccuracy;
+            
+            currentIteration++;
+            
+            plugin.getLogger().info(String.format("[ML] Training iteration %d: NB=%.1f%%, RL=%.1f%% (target: %.1f%%)", 
+                currentIteration, currentAccuracy, rlAccuracy, targetAccuracy));
+            
+            if (currentAccuracy >= targetAccuracy) {
+                plugin.getLogger().info(String.format("[ML] ✓ Reached target accuracy in %d iterations", 
+                    currentIteration));
+                plugin.getLogger().info(String.format("[ML] Final: Naive Bayes=%.1f%%, Q-Learning=%.1f%%", 
+                    currentAccuracy, rlAccuracy));
+                
+                if (currentAccuracy >= 99.0) {
+                    trainingLevel++;
+                    plugin.getLogger().info(String.format("[ML] Bonus: 99%% accuracy reached! Training level increased to %d", 
+                        trainingLevel));
+                }
+                break;
+            }
+        }
+        
+        saveMLBrain();
+        plugin.getLogger().info("[ML] Training complete. Server startup continuing...");
     }
     
     private void buildDynamicHierarchies() {
@@ -609,7 +689,8 @@ public final class ActionAnalyzer {
         CategoryData data = categories.computeIfAbsent(category, k -> new CategoryData());
         data.exampleCount++;
         
-        for (String feature : features) {
+        Set<String> uniqueFeatures = new HashSet<>(features);
+        for (String feature : uniqueFeatures) {
             data.featureCounts.merge(feature, 1, Integer::sum);
             data.totalFeatures++;
         }
@@ -647,7 +728,8 @@ public final class ActionAnalyzer {
         
         int xpAmount = calculateXpAmount(actionKey, type);
         
-        String category = determineCategory(playerId, type, context);
+        String state = buildState(type, context, inferToolFromContext(playerId, context));
+        String category = determineCategoryWithRL(playerId, type, context, state);
         String rootCategory = extractRootCategory(category);
         String skillId = generateSkillId(rootCategory, type, context);
         
@@ -656,6 +738,83 @@ public final class ActionAnalyzer {
         updateStatistics(actionKey, xpAmount);
         
         return new ActionResult(skillId, xpAmount, calculateImportance(actionKey));
+    }
+    
+    private String determineCategoryWithRL(UUID playerId, ActionType type, String context, String state) {
+        String deterministicCategory = applyDeterministicRules(type, context);
+        if (deterministicCategory != null) {
+            provideReward(state, deterministicCategory, 1.0);
+            return deterministicCategory;
+        }
+        
+        Random random = new Random();
+        if (random.nextDouble() < explorationRate) {
+            String tool = inferToolFromContext(playerId, context);
+            List<String> features = extractFeatures(context, type.name(), tool);
+            String category = classifyFeatures(features);
+            
+            provideReward(state, category, 0.5);
+            return category;
+        } else {
+            String bestAction = selectBestAction(state);
+            if (bestAction != null) {
+                return bestAction;
+            }
+            
+            String tool = inferToolFromContext(playerId, context);
+            List<String> features = extractFeatures(context, type.name(), tool);
+            return classifyFeatures(features);
+        }
+    }
+    
+    private String buildState(ActionType type, String context, String tool) {
+        return type.name() + ":" + context.toLowerCase() + ":" + tool;
+    }
+    
+    private String selectBestAction(String state) {
+        Map<String, Double> actions = qTable.get(state);
+        if (actions == null || actions.isEmpty()) {
+            return null;
+        }
+        
+        return actions.entrySet().stream()
+            .max(Map.Entry.comparingByValue())
+            .map(Map.Entry::getKey)
+            .orElse(null);
+    }
+    
+    public void provideReward(String state, String action, double reward) {
+        Map<String, Double> actions = qTable.computeIfAbsent(state, k -> new ConcurrentHashMap<>());
+        
+        double currentQ = actions.getOrDefault(action, 0.0);
+        
+        double maxFutureQ = qTable.values().stream()
+            .flatMap(m -> m.values().stream())
+            .max(Double::compareTo)
+            .orElse(0.0);
+        
+        double newQ = currentQ + learningRate * (reward + discountFactor * maxFutureQ - currentQ);
+        
+        actions.put(action, newQ);
+        
+        String stateActionKey = state + ":" + action;
+        stateActionCounts.merge(stateActionKey, 1, Integer::sum);
+    }
+    
+    public void provideFeedback(UUID playerId, ActionType type, String context, String expectedCategory, boolean correct) {
+        String tool = inferToolFromContext(playerId, context);
+        String state = buildState(type, context, tool);
+        
+        double reward = correct ? 1.0 : -1.0;
+        provideReward(state, expectedCategory, reward);
+        
+        if (correct) {
+            List<String> features = extractFeatures(context, type.name(), tool);
+            learn(expectedCategory, features);
+        }
+        
+        plugin.getLogger().info(String.format("[RL] Feedback: %s -> %s (%s) | Reward: %.1f", 
+            state, expectedCategory, correct ? "✓" : "✗", reward));
     }
     
     private String extractRootCategory(String category) {
@@ -751,61 +910,86 @@ public final class ActionAnalyzer {
     private String applyDeterministicRules(ActionType type, String context) {
         String lower = context.toLowerCase();
         
-        if (lower.contains("ore") || lower.contains("stone") || lower.contains("cobblestone") ||
-            lower.contains("andesite") || lower.contains("diorite") || lower.contains("granite") ||
-            lower.contains("deepslate") || lower.contains("netherrack") || lower.contains("debris")) {
-            return "miner";
-        }
-        
-        if (type == ActionType.KILL_MOB) {
-            if (lower.contains("zombie") || lower.contains("skeleton") || lower.contains("spider") ||
-                lower.contains("creeper") || lower.contains("enderman") || lower.contains("blaze") ||
-                lower.contains("wither") || lower.contains("ghast") || lower.contains("slime") ||
-                lower.contains("phantom") || lower.contains("drowned") || lower.contains("husk") ||
-                lower.contains("stray") || lower.contains("witch") || lower.contains("pillager") ||
-                lower.contains("vindicator") || lower.contains("evoker") || lower.contains("ravager") ||
-                lower.contains("hoglin") || lower.contains("piglin") || lower.contains("zoglin")) {
-                return "guardsman";
-            }
-            if (lower.contains("cow") || lower.contains("sheep") || lower.contains("pig") ||
-                lower.contains("chicken") || lower.contains("rabbit") || lower.contains("llama")) {
+        switch (type) {
+            case BREAK_BLOCK:
+                if (lower.contains("ore") || lower.contains("stone") || lower.contains("cobblestone") ||
+                    lower.contains("andesite") || lower.contains("diorite") || lower.contains("granite") ||
+                    lower.contains("deepslate") || lower.contains("netherrack") || lower.contains("debris")) {
+                    return "miner";
+                }
+                if (lower.contains("wheat") || lower.contains("carrot") || lower.contains("potato") ||
+                    lower.contains("beetroot") || lower.contains("melon") || lower.contains("pumpkin")) {
+                    return "farmer";
+                }
+                if (lower.contains("log") || lower.contains("wood")) {
+                    return null;
+                }
+                break;
+                
+            case PLACE_BLOCK:
+                if (lower.contains("plank") || lower.contains("log") || lower.contains("wood") ||
+                    lower.contains("brick") || lower.contains("concrete") || lower.contains("glass") ||
+                    lower.contains("door") || lower.contains("fence") || lower.contains("stairs") ||
+                    lower.contains("slab") || lower.contains("wall")) {
+                    return "builder";
+                }
+                if (lower.contains("wheat") || lower.contains("carrot") || lower.contains("potato") ||
+                    lower.contains("beetroot") || lower.contains("seeds") || lower.contains("farmland")) {
+                    return "farmer";
+                }
+                break;
+                
+            case KILL_MOB:
+                if (lower.contains("zombie") || lower.contains("skeleton") || lower.contains("spider") ||
+                    lower.contains("creeper") || lower.contains("enderman") || lower.contains("blaze") ||
+                    lower.contains("wither") || lower.contains("ghast") || lower.contains("slime") ||
+                    lower.contains("phantom") || lower.contains("drowned") || lower.contains("husk") ||
+                    lower.contains("stray") || lower.contains("witch") || lower.contains("pillager") ||
+                    lower.contains("vindicator") || lower.contains("evoker") || lower.contains("ravager") ||
+                    lower.contains("hoglin") || lower.contains("piglin") || lower.contains("zoglin")) {
+                    return "guardsman";
+                }
+                if (lower.contains("cow") || lower.contains("sheep") || lower.contains("pig") ||
+                    lower.contains("chicken") || lower.contains("rabbit") || lower.contains("llama")) {
+                    return "farmer";
+                }
+                break;
+                
+            case BREED_ANIMAL:
                 return "farmer";
-            }
-        }
-        
-        if (lower.contains("wheat") || lower.contains("carrot") || lower.contains("potato") ||
-            lower.contains("beetroot") || lower.contains("melon") || lower.contains("pumpkin") ||
-            lower.contains("seeds") || lower.contains("farmland")) {
-            return "farmer";
-        }
-        
-        if (type == ActionType.BREED_ANIMAL) {
-            return "farmer";
-        }
-        
-        if (lower.contains("sword") || lower.contains("pickaxe") || lower.contains("axe") ||
-            lower.contains("shovel") || lower.contains("hoe") || lower.contains("helmet") ||
-            lower.contains("chestplate") || lower.contains("leggings") || lower.contains("boots") ||
-            lower.contains("ingot") || lower.contains("furnace") || lower.contains("anvil") ||
-            lower.contains("smithing")) {
-            return "blacksmith";
-        }
-        
-        if (lower.contains("enchant") || lower.contains("book") || lower.contains("lectern") ||
-            lower.contains("bookshelf")) {
-            return "librarian";
-        }
-        
-        if (lower.contains("potion") || lower.contains("brew") || lower.contains("golden_apple") ||
-            lower.contains("regeneration") || lower.contains("healing")) {
-            return "healer";
-        }
-        
-        if (lower.contains("plank") || lower.contains("log") || lower.contains("wood") ||
-            lower.contains("brick") || lower.contains("concrete") || lower.contains("glass") ||
-            lower.contains("door") || lower.contains("fence") || lower.contains("stairs") ||
-            lower.contains("slab") || lower.contains("wall")) {
-            return "builder";
+                
+            case CRAFT_ITEM:
+                if (lower.contains("sword") || lower.contains("pickaxe") || lower.contains("axe") ||
+                    lower.contains("shovel") || lower.contains("hoe") || lower.contains("helmet") ||
+                    lower.contains("chestplate") || lower.contains("leggings") || lower.contains("boots")) {
+                    return "blacksmith";
+                }
+                if (lower.contains("enchant") || lower.contains("book")) {
+                    return "librarian";
+                }
+                if (lower.contains("potion") || lower.contains("brew") || lower.contains("golden_apple")) {
+                    return "healer";
+                }
+                if (lower.contains("door") || lower.contains("fence") || lower.contains("stairs") ||
+                    lower.contains("slab") || lower.contains("plank")) {
+                    return "builder";
+                }
+                break;
+                
+            case INTERACT:
+                if (lower.contains("anvil") || lower.contains("smithing") || lower.contains("furnace")) {
+                    return "blacksmith";
+                }
+                if (lower.contains("lectern") || lower.contains("bookshelf") || lower.contains("enchant")) {
+                    return "librarian";
+                }
+                if (lower.contains("brew") || lower.contains("cauldron")) {
+                    return "healer";
+                }
+                if (lower.contains("farmland") || lower.contains("composter")) {
+                    return "farmer";
+                }
+                break;
         }
         
         return null;
@@ -833,8 +1017,7 @@ public final class ActionAnalyzer {
             return "builder";
         }
         
-        String bestCategory = null;
-        double bestScore = Double.NEGATIVE_INFINITY;
+        Map<String, Double> scores = new HashMap<>();
         
         for (Map.Entry<String, CategoryData> entry : categories.entrySet()) {
             String category = entry.getKey();
@@ -845,19 +1028,66 @@ public final class ActionAnalyzer {
             
             for (String feature : features) {
                 int featureCount = data.featureCounts.getOrDefault(feature, 0);
-                double prob = (featureCount + 1.0) / (data.totalFeatures + data.featureCounts.size());
-                featureScore += Math.log(prob);
+                double prob = (featureCount + 1.0) / (data.totalFeatures + data.featureCounts.size() + 1.0);
+                featureScore += Math.log(prob + 1e-10);
             }
             
             double totalScore = categoryProb + featureScore;
-            
-            if (totalScore > bestScore) {
-                bestScore = totalScore;
-                bestCategory = category;
+            scores.put(category, totalScore);
+        }
+        
+        String bestCategory = applyContextualRules(features, scores);
+        
+        return bestCategory != null ? bestCategory : "builder";
+    }
+    
+    private String applyContextualRules(List<String> features, Map<String, Double> scores) {
+        boolean hasAxe = features.stream().anyMatch(f -> f.contains("axe"));
+        boolean hasPickaxe = features.stream().anyMatch(f -> f.contains("pickaxe"));
+        boolean hasSword = features.stream().anyMatch(f -> f.contains("sword"));
+        boolean hasHoe = features.stream().anyMatch(f -> f.contains("hoe"));
+        boolean hasFishingRod = features.stream().anyMatch(f -> f.contains("fishing"));
+        
+        boolean hasWood = features.stream().anyMatch(f -> f.contains("log") || f.contains("wood") || f.contains("plank"));
+        boolean hasCrop = features.stream().anyMatch(f -> f.contains("wheat") || f.contains("carrot") || f.contains("potato"));
+        boolean hasFish = features.stream().anyMatch(f -> f.contains("fish") || f.contains("cod") || f.contains("salmon"));
+        boolean hasAnimal = features.stream().anyMatch(f -> f.contains("cow") || f.contains("sheep") || f.contains("pig") || f.contains("chicken"));
+        
+        if (hasWood) {
+            if (hasAxe) {
+                return "blacksmith";
+            } else if (hasPickaxe) {
+                return "builder";
             }
         }
         
-        return bestCategory != null ? bestCategory : "builder";
+        if (hasFish) {
+            if (hasFishingRod) {
+                return "farmer";
+            }
+        }
+        
+        if (hasCrop && hasHoe) {
+            return "farmer";
+        }
+        
+        if (hasAnimal) {
+            if (hasSword) {
+                return "farmer";
+            }
+        }
+        
+        String bestCategory = null;
+        double bestScore = Double.NEGATIVE_INFINITY;
+        
+        for (Map.Entry<String, Double> entry : scores.entrySet()) {
+            if (entry.getValue() > bestScore) {
+                bestScore = entry.getValue();
+                bestCategory = entry.getKey();
+            }
+        }
+        
+        return bestCategory;
     }
     
     private String inferToolFromContext(UUID playerId, String context) {
@@ -1062,6 +1292,7 @@ public final class ActionAnalyzer {
             try (ObjectOutputStream oos = new ObjectOutputStream(
                     new BufferedOutputStream(Files.newOutputStream(brainFile)))) {
                 
+                oos.writeInt(trainingLevel);
                 oos.writeInt(totalExamples);
                 oos.writeInt(categories.size());
                 
@@ -1075,6 +1306,16 @@ public final class ActionAnalyzer {
                     for (Map.Entry<String, Integer> feature : data.featureCounts.entrySet()) {
                         oos.writeUTF(feature.getKey());
                         oos.writeInt(feature.getValue());
+                    }
+                }
+                
+                oos.writeInt(qTable.size());
+                for (Map.Entry<String, Map<String, Double>> stateEntry : qTable.entrySet()) {
+                    oos.writeUTF(stateEntry.getKey());
+                    oos.writeInt(stateEntry.getValue().size());
+                    for (Map.Entry<String, Double> actionEntry : stateEntry.getValue().entrySet()) {
+                        oos.writeUTF(actionEntry.getKey());
+                        oos.writeDouble(actionEntry.getValue());
                     }
                 }
             }
@@ -1097,6 +1338,7 @@ public final class ActionAnalyzer {
         try (ObjectInputStream ois = new ObjectInputStream(
                 new BufferedInputStream(Files.newInputStream(brainFile)))) {
             
+            trainingLevel = ois.readInt();
             totalExamples = ois.readInt();
             int categoryCount = ois.readInt();
             
@@ -1118,6 +1360,20 @@ public final class ActionAnalyzer {
                 categories.put(categoryName, data);
             }
             
+            qTable.clear();
+            int qTableSize = ois.readInt();
+            for (int i = 0; i < qTableSize; i++) {
+                String state = ois.readUTF();
+                int actionCount = ois.readInt();
+                Map<String, Double> actions = new ConcurrentHashMap<>();
+                for (int j = 0; j < actionCount; j++) {
+                    String action = ois.readUTF();
+                    double qValue = ois.readDouble();
+                    actions.put(action, qValue);
+                }
+                qTable.put(state, actions);
+            }
+            
             plugin.getLogger().info("ML brain loaded (" + totalExamples + " examples, " + categories.size() + " categories)");
             return true;
         } catch (IOException e) {
@@ -1126,17 +1382,82 @@ public final class ActionAnalyzer {
         }
     }
     
-    public int trainWithQuiz(int questionCount) {
+    private record TrainingResult(double naiveBayesAccuracy, double rlAccuracy) {}
+    
+    private TrainingResult trainWithQuizAndGetRLAccuracy(int questionCount) {
         Random random = new Random();
         int correct = 0;
+        int rlCorrect = 0;
         
         String[][] quizData = {
             {"diamond_ore", "BREAK_BLOCK", "pickaxe", "miner"},
             {"iron_ore", "BREAK_BLOCK", "pickaxe", "miner"},
             {"wheat", "BREAK_BLOCK", "hand", "farmer"},
             {"carrot", "BREAK_BLOCK", "hand", "farmer"},
-            {"zombie", "ENTITY_KILL", "sword", "guardsman"},
-            {"skeleton", "ENTITY_KILL", "sword", "guardsman"},
+            {"zombie", "KILL_MOB", "sword", "guardsman"},
+            {"skeleton", "KILL_MOB", "sword", "guardsman"},
+            {"iron_sword", "CRAFT_ITEM", "hand", "blacksmith"},
+            {"diamond_pickaxe", "CRAFT_ITEM", "hand", "blacksmith"},
+            {"oak_planks", "PLACE_BLOCK", "hand", "builder"},
+            {"stone_bricks", "PLACE_BLOCK", "hand", "builder"},
+            {"enchanting_table", "PLACE_BLOCK", "hand", "librarian"},
+            {"book", "CRAFT_ITEM", "hand", "librarian"},
+            {"potion", "CRAFT_ITEM", "hand", "healer"},
+            {"golden_apple", "CRAFT_ITEM", "hand", "healer"}
+        };
+        
+        int rlAttempts = 0;
+        
+        for (int i = 0; i < questionCount; i++) {
+            String[] question = quizData[random.nextInt(quizData.length)];
+            String context = question[0];
+            String actionType = question[1];
+            String tool = question[2];
+            String expectedCategory = question[3];
+            
+            String state = buildState(ActionType.valueOf(actionType), context, tool);
+            
+            List<String> features = extractFeatures(context, actionType, tool);
+            String predictedCategory = classifyFeatures(features);
+            
+            if (predictedCategory.equals(expectedCategory)) {
+                correct++;
+                provideReward(state, expectedCategory, 1.0);
+            } else {
+                provideReward(state, predictedCategory, -0.5);
+                provideReward(state, expectedCategory, 1.0);
+            }
+            
+            String rlPrediction = selectBestAction(state);
+            if (rlPrediction != null) {
+                rlAttempts++;
+                if (rlPrediction.equals(expectedCategory)) {
+                    rlCorrect++;
+                }
+            }
+            
+            learn(expectedCategory, features);
+        }
+        
+        double nbAccuracy = questionCount > 0 ? (double) correct / questionCount * 100 : 0;
+        double rlAccuracyKnown = rlAttempts > 0 ? (double) rlCorrect / rlAttempts * 100 : 0.0;
+        double rlAccuracyTotal = questionCount > 0 ? (double) rlCorrect / questionCount * 100 : 0.0;
+        
+        return new TrainingResult(nbAccuracy, rlAccuracyTotal);
+    }
+    
+    public int trainWithQuiz(int questionCount) {
+        Random random = new Random();
+        int correct = 0;
+        int rlCorrect = 0;
+        
+        String[][] quizData = {
+            {"diamond_ore", "BREAK_BLOCK", "pickaxe", "miner"},
+            {"iron_ore", "BREAK_BLOCK", "pickaxe", "miner"},
+            {"wheat", "BREAK_BLOCK", "hand", "farmer"},
+            {"carrot", "BREAK_BLOCK", "hand", "farmer"},
+            {"zombie", "KILL_MOB", "sword", "guardsman"},
+            {"skeleton", "KILL_MOB", "sword", "guardsman"},
             {"iron_sword", "CRAFT_ITEM", "hand", "blacksmith"},
             {"diamond_pickaxe", "CRAFT_ITEM", "hand", "blacksmith"},
             {"oak_planks", "PLACE_BLOCK", "hand", "builder"},
@@ -1154,40 +1475,78 @@ public final class ActionAnalyzer {
             String tool = question[2];
             String expectedCategory = question[3];
             
+            String state = buildState(ActionType.valueOf(actionType), context, tool);
+            
             List<String> features = extractFeatures(context, actionType, tool);
             String predictedCategory = classifyFeatures(features);
             
             if (predictedCategory.equals(expectedCategory)) {
                 correct++;
+                provideReward(state, expectedCategory, 1.0);
+            } else {
+                provideReward(state, predictedCategory, -0.5);
+                provideReward(state, expectedCategory, 1.0);
+            }
+            
+            String rlPrediction = selectBestAction(state);
+            if (rlPrediction != null && rlPrediction.equals(expectedCategory)) {
+                rlCorrect++;
             }
             
             learn(expectedCategory, features);
         }
         
+        double rlAccuracy = questionCount > 0 ? (double) rlCorrect / questionCount * 100 : 0;
+        plugin.getLogger().info(String.format("[RL] Q-Learning accuracy: %.1f%% (%d/%d)", 
+            rlAccuracy, rlCorrect, questionCount));
+        
         saveMLBrain();
         return correct;
     }
     
-    public int trainWithSyntheticData(int generations) {
+    public int trainWithSyntheticData(int exampleCount) {
         Random random = new Random();
         int trained = 0;
+        int maxAttempts = exampleCount * 2;
+        int attempts = 0;
         
-        List<TrainingExample> allExamples = generateTrainingExamplesFromMaterials();
-        
-        if (allExamples.isEmpty()) {
-            plugin.getLogger().warning("No training examples generated from materials!");
-            return 0;
-        }
-        
-        for (int i = 0; i < generations; i++) {
-            TrainingExample example = allExamples.get(random.nextInt(allExamples.size()));
-            learn(example.category, extractFeatures(example.context, example.actionType, example.tool));
+        while (trained < exampleCount && attempts < maxAttempts) {
+            attempts++;
+            Material material = getRandomMaterial(random);
+            String context = material.name().toLowerCase();
+            
+            ActionType actionType = getRandomActionType(random);
+            String tool = getRandomTool(random);
+            
+            String expectedCategory = applyDeterministicRules(actionType, context);
+            if (expectedCategory == null) {
+                continue;
+            }
+            
+            String state = buildState(actionType, context, tool);
+            provideReward(state, expectedCategory, 1.0);
+            
+            List<String> features = extractFeatures(context, actionType.name(), tool);
+            learn(expectedCategory, features);
             trained++;
         }
         
-        saveMLBrain();
-        
         return trained;
+    }
+    
+    private Material getRandomMaterial(Random random) {
+        Material[] materials = Material.values();
+        return materials[random.nextInt(materials.length)];
+    }
+    
+    private ActionType getRandomActionType(Random random) {
+        ActionType[] types = ActionType.values();
+        return types[random.nextInt(types.length)];
+    }
+    
+    private String getRandomTool(Random random) {
+        String[] tools = {"pickaxe", "axe", "shovel", "hoe", "sword", "hand"};
+        return tools[random.nextInt(tools.length)];
     }
     
     private List<TrainingExample> generateTrainingExamplesFromMaterials() {
